@@ -1,0 +1,12 @@
+node_modules/
+dist/
+.tooling/
+.npmrc
+*.tsbuildinfo
+.dz-fstest/
+
+# Employer-specific bootstrap and agent notes. This repository is public;
+# neither of these may be committed. See CLAUDE.md's Toolchain section.
+/facebook/
+/CLAUDE.local.md
+/.claude/

@@ -1,0 +1,8 @@
+name: ditz2
+components:
+  - build
+  - cli
+  - core
+  - docs
+  - render
+  - store

@@ -1,0 +1,10 @@
+{
+  "//": "Typechecks the test files, which tsconfig.json excludes so they stay out of dist/. Vitest transpiles without typechecking, so without this a type error in a test is invisible.",
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "rootDir": "."
+  },
+  "include": ["src/**/*.ts", "tests/**/*.ts"],
+  "exclude": []
+}
