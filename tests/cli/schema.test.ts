@@ -125,6 +125,12 @@ describe('real output validates against the schema', () => {
     });
   });
 
+  it('doctor --fix, whose report carries what it repaired', () => {
+    project((dir) => {
+      check('doctorReport', JSON.parse(dz(['doctor', '--fix', '--json'], { cwd: dir }).stdout));
+    });
+  });
+
   it('component list', () => {
     project((dir) => {
       check('componentList', JSON.parse(dz(['component', 'list', '--json'], { cwd: dir }).stdout));

@@ -47,23 +47,38 @@ function parseEntryHeader(rest: string, filename: string): LogEntry {
 
 export function parseLog(lines: string[], filename: string): LogEntry[] {
   const entries: LogEntry[] = [];
+  // A blank line is ambiguous: inside a comment it is content, after one it is
+  // separation from the next entry. Which it is depends on what comes *after*
+  // it, so blank lines are counted and only become text when continuation
+  // resumes. Whatever is still pending at a new entry, or at the end, was
+  // separation. This is what lets a blank line be written blank; the format
+  // used to spell it as four spaces purely because this loop could not wait.
+  let pending = 0;
   for (const line of lines) {
     if (line.startsWith('- ')) {
       entries.push(parseEntryHeader(line.slice(2), filename));
+      pending = 0;
       continue;
     }
-    // Checked before the blank-line case: a line of exactly four spaces is a
-    // blank line *inside* a comment, not a separator between entries.
+    // Still checked before the blank-line case, for files written by earlier
+    // versions: a line of exactly four spaces is an in-comment blank line, and
+    // slicing INDENT off leaves the '' that says so.
     if (line.startsWith(INDENT)) {
       const current = entries[entries.length - 1];
       if (current === undefined) {
         throw new DzError('PARSE_ERROR', `${filename}: continuation line before any log entry`);
       }
-      const piece = line.slice(INDENT.length);
+      const piece = `${'\n'.repeat(pending)}${line.slice(INDENT.length)}`;
       current.text = current.text === null ? piece : `${current.text}\n${piece}`;
+      pending = 0;
       continue;
     }
-    if (line.trim() === '') continue;
+    if (line.trim() === '') {
+      // Nothing to attach it to yet: the blank between '## Log' and the first
+      // entry is neither content nor separation.
+      if (entries.length > 0) pending++;
+      continue;
+    }
     throw new DzError('PARSE_ERROR', `${filename}: unrecognized log line: ${line}`);
   }
   return entries;
@@ -75,7 +90,12 @@ export function renderLog(entries: LogEntry[]): string {
     const detail = e.detail === null ? '' : `: ${e.detail}`;
     out += `- ${e.timestamp}${SEP}${e.author}${SEP}${e.verb}${detail}\n`;
     if (e.text !== null) {
-      for (const line of e.text.split('\n')) out += `${INDENT}${line}\n`;
+      // A blank line is written blank. Indenting it would put trailing
+      // whitespace in the file, which no ordinary text tool preserves: an
+      // editor that strips on save, or `git apply --whitespace=fix`, would
+      // silently rewrite someone's comment. parseLog recovers the blank from
+      // the continuation line that follows it instead.
+      for (const line of e.text.split('\n')) out += line === '' ? '\n' : `${INDENT}${line}\n`;
     }
   }
   return out;

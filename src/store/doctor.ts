@@ -9,20 +9,24 @@ import fs from 'node:fs';
 import path from 'node:path';
 import YAML from 'yaml';
 import type { Config, Issue } from '../core/types.js';
+import { parseIssue } from '../core/serialize.js';
 import { validateIssue } from '../core/validate.js';
 import { IGNORE_LINES, loadConfig } from './config.js';
 import { resolveAuthor } from './identity.js';
-import { issuePath, loadAllIssues } from './issues.js';
+import { issuePath, loadAllIssues, writeFileAtomic } from './issues.js';
 import { lockPath, lockState } from './lock.js';
 import { configPath, dzDir, issuesDir, localConfigPath } from './root.js';
 
 /**
  * One problem found by `dz doctor`, with what to do about it.
  *
- * Diagnosis only: nothing here repairs anything. A malformed issue file is
- * someone's data, and guessing at a fix could destroy content the tool cannot
+ * Diagnosis, with one narrow exception. A malformed issue file is someone's
+ * data, and guessing at a fix could destroy content the tool cannot
  * reconstruct. Spec §2 also treats "needs a repair command to police it" as a
- * cost, and cites avoiding one as a reason for this design.
+ * cost, and cites avoiding one as a reason for this design. So every remedy
+ * here is prose for a person to act on, except the trailing whitespace dz
+ * wrote itself, which `repair` strips under an explicit --fix and only where
+ * the result parses to an identical issue.
  */
 export interface Diagnosis {
   code: string;
@@ -214,6 +218,107 @@ function checkLock(root: string): Diagnosis[] {
   return [];
 }
 
+const TRAILING_RE = /[ \t]+$/;
+/** Enough to find them by hand without turning the message into a listing. */
+const MAX_LINES_NAMED = 10;
+
+interface TrailingHit {
+  file: string;
+  rel: string;
+  lines: number[];
+  /** The trimmed text, or null if trimming would change what dz reads back. */
+  trimmed: string | null;
+}
+
+/**
+ * The trimmed file, but only when trimming provably changes nothing: both
+ * spellings are parsed and the resulting issues compared. Trailing whitespace
+ * on a blank line is layout, and every version before this one wrote an
+ * in-comment blank line as four spaces. Trailing whitespace after real text is
+ * content — two spaces are a markdown line break — and stripping it would
+ * rewrite what someone typed. Nothing here can tell the two apart by looking;
+ * the round-trip can, so it decides.
+ */
+function trimmedIfContentPreserving(text: string, rel: string): string | null {
+  const trimmed = text.split('\n').map((l) => l.replace(TRAILING_RE, '')).join('\n');
+  if (trimmed === text) return null;
+  try {
+    const before = parseIssue(text, rel);
+    const after = parseIssue(trimmed, rel);
+    // Issues are plain data, so this compares every field including `unknown`.
+    if (JSON.stringify(before) !== JSON.stringify(after)) return null;
+  } catch {
+    // Unparseable, and reported as such already. A file dz cannot read is one
+    // it has no business rewriting.
+    return null;
+  }
+  return trimmed;
+}
+
+function trailingHits(root: string): TrailingHit[] {
+  const dir = issuesDir(root);
+  if (!fs.existsSync(dir)) return [];
+  const hits: TrailingHit[] = [];
+  for (const name of fs.readdirSync(dir).filter((n) => n.endsWith('.md')).sort()) {
+    const file = path.join(dir, name);
+    const rel = path.relative(root, file);
+    const text = fs.readFileSync(file, 'utf8');
+    const lines = text
+      .split('\n')
+      .flatMap((line, i) => (TRAILING_RE.test(line) ? [i + 1] : []));
+    if (lines.length === 0) continue;
+    hits.push({ file, rel, lines, trimmed: trimmedIfContentPreserving(text, rel) });
+  }
+  return hits;
+}
+
+/**
+ * Trailing whitespace is invisible and nothing preserves it: an editor that
+ * strips on save, `git apply --whitespace=fix`, or any of the whitespace lints
+ * a repository is likely to already run will all quietly rewrite these files.
+ * It is worth reporting because dz used to put it there itself.
+ */
+function checkTrailingWhitespace(root: string): Diagnosis[] {
+  return trailingHits(root).map(({ rel, lines, trimmed }) => {
+    const named = lines.slice(0, MAX_LINES_NAMED).join(', ');
+    const rest = lines.length > MAX_LINES_NAMED ? `, and ${lines.length - MAX_LINES_NAMED} more` : '';
+    return {
+      code: 'TRAILING_WHITESPACE',
+      file: rel,
+      message: `${rel} has trailing whitespace on line ${named}${rest}`,
+      remedy: trimmed === null
+        ? `strip it by hand if you meant to. 'dz doctor --fix' will not: here the whitespace follows real text, where two trailing spaces are a markdown line break, so removing it would change the file's content.`
+        : `run 'dz doctor --fix'. Versions before this one wrote a blank line inside a log comment as four spaces; stripping it back is checked to leave everything dz reads unchanged.`,
+    };
+  });
+}
+
+/** One thing `dz doctor --fix` did. */
+export interface Repair {
+  file: string;
+  message: string;
+}
+
+/**
+ * The exception to this file being diagnosis-only, and deliberately a narrow
+ * one: it runs only under an explicit --fix, and only writes a file whose
+ * parsed content it has already proved identical. Everything else here stays a
+ * remedy someone reads and carries out, because a wrong repair to an issue
+ * destroys content the tool cannot reconstruct.
+ */
+export function repair(root: string): Repair[] {
+  const done: Repair[] = [];
+  for (const { file, rel, lines, trimmed } of trailingHits(root)) {
+    if (trimmed === null) continue;
+    writeFileAtomic(file, trimmed);
+    done.push({
+      file: rel,
+      message: `stripped trailing whitespace from ${lines.length} line${lines.length === 1 ? '' : 's'}`,
+    });
+  }
+  return done;
+}
+
 /** Anything in issues/ that is not an issue: crashed temp writes, stray files. */
 function checkStrayFiles(root: string): Diagnosis[] {
   const dir = issuesDir(root);
@@ -266,6 +371,7 @@ export function diagnose(root: string, env: NodeJS.ProcessEnv): Diagnosis[] {
     })),
     ...checkInvariants(root, issues),
     ...(config === null ? [] : checkComponents(root, issues, config)),
+    ...checkTrailingWhitespace(root),
     ...checkStrayFiles(root),
   ];
 }

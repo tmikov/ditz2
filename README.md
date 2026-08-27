@@ -104,6 +104,13 @@ parse-and-render cycle unchanged. A body line reading exactly `## Log` starts th
 it cannot appear in the body. And because the frontmatter is re-emitted from the parsed values,
 comments and formatting inside it do not survive a rewrite.
 
+Log comment text is indented four spaces under its entry. A blank line inside a comment is
+written blank, and read back as content because an indented line follows it; a blank line that
+nothing follows is separation between entries. So a comment cannot begin or end with a blank
+line — `dz` trims a message either way — and nothing dz writes carries trailing whitespace.
+Files written by earlier versions spelled an in-comment blank line as four spaces; those still
+read correctly, and `dz doctor --fix` cleans them up.
+
 Issue ids are UUIDv7, so filenames sort chronologically. The short id printed by every command is
 the first 13 characters of the UUID — long enough to stay unique across issues created in
 different milliseconds — and any unambiguous prefix of it works as `<id-prefix>` input, so you
@@ -163,7 +170,8 @@ would corrupt the entry it appears in. Single spaces, as in `Name <email>`, are 
 
 Commands that modify the project take a single lock at `dz/.lock`, so two running at once
 cannot lose each other's changes. Read-only commands — `list`, `show`, `grep`, `doctor`,
-`schema`, `help` — never take it, and never wait.
+`schema`, `help` — never take it, and never wait. `dz doctor --fix` does write, so that form
+takes the lock like any other mutation.
 
 On contention a command retries briefly and then fails with `LOCKED`. Set `DZ_LOCK_TIMEOUT_MS`
 to change how long it waits; `0` fails immediately, which is what you want if you are
@@ -232,7 +240,7 @@ dz comment <id-prefix> -m "<text>"
 dz close  <id-prefix> --as <fixed|wontfix|duplicate> [-m "<text>"]
 dz edit   <id-prefix> [--on-conflict <abort|force>]
 dz grep   <regex> [<list filters>]
-dz doctor
+dz doctor [--fix]
 dz unlock [--force]
 dz component list | add <name> | rm <name> [--force]
 dz schema
@@ -252,11 +260,19 @@ against the schema, which is what keeps the two from drifting apart.
 `dz doctor` checks the project for problems nothing else reports: a missing or emptied
 `dz/.gitignore` (which would let your identity file be committed, so anyone who clones authors
 their log entries as you), a `config.yaml` whose contents are being silently ignored, issues
-naming a component you have since removed, unparseable issue files, and temp files left by an
-interrupted write. It prints a remedy for each and exits `1` if it found any.
+naming a component you have since removed, unparseable issue files, temp files left by an
+interrupted write, and issue files carrying trailing whitespace. It prints a remedy for each and
+exits `1` if it found any.
 
-It only diagnoses. There is no `--fix`: a malformed issue file is your data, and guessing at a
-repair could destroy something the tool cannot reconstruct.
+It diagnoses; it does not repair. A malformed issue file is your data, and guessing at a fix
+could destroy something the tool cannot reconstruct, so every remedy is prose for you to act on.
+
+The single exception is `dz doctor --fix`, which strips trailing whitespace from issue files.
+It is safe to automate because it is not a guess: each file is parsed before and after, and
+rewritten only if the two parse to an identical issue. Where the whitespace follows real text —
+two trailing spaces are a markdown line break — that check fails, so `--fix` reports the file
+and leaves it alone. Versions before this one wrote a blank line inside a log comment as four
+spaces, which is what put trailing whitespace in existing projects.
 
 Note: `dz init` starts a project with an empty component list, so `--component` on `add`/`set`
 rejects every value until you run `dz component add <name>`.

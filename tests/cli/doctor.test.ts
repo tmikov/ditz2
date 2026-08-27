@@ -259,3 +259,112 @@ describe('dz doctor and the project lock', () => {
     });
   });
 });
+
+/** The one .md in a freshly seeded project. */
+function issueFile(dir: string): string {
+  const issues = path.join(dir, 'dz', 'issues');
+  return path.join(issues, fs.readdirSync(issues).filter((n) => n.endsWith('.md'))[0]);
+}
+
+/**
+ * Rewrites an issue the way every version before this one wrote it: a blank
+ * line inside a comment spelled as four spaces. Only blanks that a
+ * continuation line follows, which is exactly what renderLog used to indent.
+ */
+function toLegacyForm(dir: string): string {
+  const file = issueFile(dir);
+  fs.writeFileSync(file, fs.readFileSync(file, 'utf8').replace(/\n\n(?=    )/g, '\n    \n'));
+  return file;
+}
+
+function commented(dir: string): string {
+  const id = JSON.parse(dz(['add', 'has a comment', '--json'], { cwd: dir }).stdout).id;
+  dz(['comment', id.slice(0, 13), '-m', 'one\n\ntwo'], { cwd: dir });
+  return id;
+}
+
+describe('dz doctor and trailing whitespace', () => {
+  it('reports an issue file left carrying trailing whitespace', () => {
+    project((dir) => {
+      commented(dir);
+      toLegacyForm(dir);
+      expect(codes(dir)).toContain('TRAILING_WHITESPACE');
+    });
+  });
+
+  it('says nothing about a file this version wrote', () => {
+    project((dir) => {
+      commented(dir);
+      expect(codes(dir)).not.toContain('TRAILING_WHITESPACE');
+    });
+  });
+
+  it('strips it under --fix, leaving the comment text untouched', () => {
+    project((dir) => {
+      const id = commented(dir);
+      const before = JSON.parse(dz(['show', id.slice(0, 13), '--json'], { cwd: dir }).stdout);
+      const file = toLegacyForm(dir);
+      expect(fs.readFileSync(file, 'utf8')).toMatch(/[ \t]+\n/);
+
+      const r = dz(['doctor', '--fix'], { cwd: dir });
+
+      expect(r.code).toBe(0);
+      expect(r.stdout).toContain('stripped trailing whitespace');
+      expect(fs.readFileSync(file, 'utf8')).not.toMatch(/[ \t]+\n/);
+      // The blank line inside the comment is the whole point: it must survive.
+      expect(JSON.parse(dz(['show', id.slice(0, 13), '--json'], { cwd: dir }).stdout))
+        .toEqual(before);
+      expect(codes(dir)).not.toContain('TRAILING_WHITESPACE');
+    });
+  });
+
+  it('is idempotent, so it can be wired into a hook', () => {
+    project((dir) => {
+      commented(dir);
+      toLegacyForm(dir);
+      dz(['doctor', '--fix'], { cwd: dir });
+      const after = fs.readFileSync(issueFile(dir), 'utf8');
+      const r = dz(['doctor', '--fix'], { cwd: dir });
+      expect(r.code).toBe(0);
+      expect(fs.readFileSync(issueFile(dir), 'utf8')).toBe(after);
+    });
+  });
+
+  it('lists what it fixed under --json', () => {
+    project((dir) => {
+      commented(dir);
+      toLegacyForm(dir);
+      const out = JSON.parse(dz(['doctor', '--fix', '--json'], { cwd: dir }).stdout);
+      expect(out.problems).toEqual([]);
+      expect(out.fixed).toHaveLength(1);
+      expect(out.fixed[0].file).toMatch(/^dz\/issues\/.*\.md$/);
+    });
+  });
+
+  it('refuses to strip whitespace that is part of someone comment text', () => {
+    project((dir) => {
+      // Two trailing spaces are a markdown line break. Inside a body they are
+      // content, and trimming them would silently rewrite what someone typed.
+      dz(['add', 'hard break', '-m', 'line one  \nline two'], { cwd: dir });
+      const file = issueFile(dir);
+      const before = fs.readFileSync(file, 'utf8');
+      expect(before).toContain('line one  \n');
+
+      const r = dz(['doctor', '--fix'], { cwd: dir });
+
+      expect(fs.readFileSync(file, 'utf8')).toBe(before);
+      // Still reported: doctor tells you it is there, it just will not guess.
+      expect(codes(dir)).toContain('TRAILING_WHITESPACE');
+      expect(r.code).toBe(1);
+    });
+  });
+
+  it('leaves an unparseable file alone, since it cannot prove a fix is safe', () => {
+    project((dir) => {
+      const bad = path.join(dir, 'dz', 'issues', 'bad.md');
+      fs.writeFileSync(bad, 'garbage   \n');
+      dz(['doctor', '--fix'], { cwd: dir });
+      expect(fs.readFileSync(bad, 'utf8')).toBe('garbage   \n');
+    });
+  });
+});

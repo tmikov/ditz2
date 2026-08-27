@@ -141,6 +141,19 @@ export const JSON_SCHEMA = {
       type: 'object',
       description: '`dz doctor --json`. An empty problems array means healthy.',
       properties: {
+        fixed: {
+          type: 'array',
+          description: 'Present only under --fix: the files it rewrote, and what it did to each. Absent, not empty, when --fix was not passed.',
+          items: {
+            type: 'object',
+            properties: {
+              file: { type: 'string' },
+              message: { type: 'string' },
+            },
+            required: ['file', 'message'],
+            additionalProperties: false,
+          },
+        },
         problems: {
           type: 'array',
           items: {

@@ -6,7 +6,7 @@
  */
 
 import type { Issue } from '../core/types.js';
-import type { Diagnosis } from '../store/doctor.js';
+import type { Diagnosis, Repair } from '../store/doctor.js';
 import type { LoadFailure } from '../store/issues.js';
 
 // UUIDv7's leading 8 hex chars are only the top 32 bits of the 48-bit
@@ -67,6 +67,17 @@ export function renderWarnings(failures: LoadFailure[]): string {
       return `dz: warning: skipping ${detail}`;
     })
     .join('\n');
+}
+
+/**
+ * What --fix changed, above the problems that remain. Printed even when
+ * nothing is left to report: a command that silently rewrites files is worse
+ * than a noisy one, and this is the only place dz writes without being asked
+ * for a specific issue.
+ */
+export function renderRepairs(fixed: Repair[]): string {
+  if (fixed.length === 0) return '';
+  return `${fixed.map((f) => `fixed ${f.file}: ${f.message}\n`).join('')}\n`;
 }
 
 export function renderDiagnoses(problems: Diagnosis[]): string {

@@ -51,10 +51,12 @@ const TUTORIAL = `dz tutorial — one session, in order.
       Adds a component. A new project has none, and --component rejects any
       value until you add one. Also 'component list' and 'component rm'.
 
-  dz doctor
+  dz doctor [--fix]
       Checks the project for problems nothing else reports: a missing
       dz/.gitignore, a broken config.yaml, issues naming a component you have
-      since removed. It only reports, and never edits your files.
+      since removed. It only reports; every remedy is prose for you to act on.
+      The exception is --fix, which strips trailing whitespace from issue
+      files, and only where the result parses to an identical issue.
 
   dz unlock
       Removes a project lock left behind by a command that died mid-write.
@@ -122,8 +124,11 @@ SCHEMA
 WHEN SOMETHING LOOKS WRONG
   'dz doctor' reports project-level problems with a remedy for each, exits 1
       if it found any, and emits {"problems":[{"code","file","message",
-      "remedy"}]} under --json. It never edits anything, so it is safe to run
-      first when a command fails for a reason you did not expect.
+      "remedy"}]} under --json. It edits nothing without --fix, so it is safe
+      to run first when a command fails for a reason you did not expect.
+      'dz doctor --fix' takes the lock, strips trailing whitespace from issue
+      files where doing so provably changes no content, and adds a "fixed"
+      array to the --json payload. The exit code still reflects what remains.
 
 IDENTITY
   Every mutation records an author. If 'dz init' could not probe one, set

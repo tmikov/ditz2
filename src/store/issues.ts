@@ -56,35 +56,46 @@ export function readIssue(root: string, id: string): Issue {
 }
 
 /**
- * Atomic: render to a sibling temp file, then rename. A crash mid-write cannot
- * truncate an issue, and rename within a directory is atomic on POSIX.
+ * Atomic: write a sibling temp file, then rename. A crash mid-write cannot
+ * truncate an issue, and rename within a directory is atomic on POSIX. The
+ * temp name is the one `dz doctor` recognises as an orphaned write, so an
+ * interrupted one is reported rather than mistaken for a stray file.
+ *
+ * Shared so there is a single spelling of the convention: doctor --fix writes
+ * issue files too, and a second copy of this would be a second thing to keep
+ * in step with the name doctor looks for.
  */
+export function writeFileAtomic(target: string, text: string): void {
+  const tmp = `${target}.tmp-${process.pid}-${tmpCounter++}`;
+  try {
+    fs.writeFileSync(tmp, text, 'utf8');
+    fs.renameSync(tmp, target);
+  } catch (err) {
+    if (fs.existsSync(tmp)) fs.rmSync(tmp, { force: true });
+    throw err;
+  }
+}
+
 export function writeIssue(root: string, issue: Issue): void {
   const target = issuePath(root, issue.id);
   // A project whose issues/ has gone missing is a recoverable state, not a bug
   // in the tool; without this the write failed with a raw ENOENT reported as an
   // internal error. `dz doctor` reports the missing directory separately.
   fs.mkdirSync(path.dirname(target), { recursive: true });
-  const tmp = `${target}.tmp-${process.pid}-${tmpCounter++}`;
   const text = renderIssue(issue);
+  // The format's own parser is the write-side validator: free text can collide
+  // with the log grammar's delimiters, and a file we cannot read back is worse
+  // than a refused write. One extra parse per write costs nothing at this size.
+  // Checked before anything is written, so a refused write touches no disk.
   try {
-    fs.writeFileSync(tmp, text, 'utf8');
-    // The format's own parser is the write-side validator: free text can collide
-    // with the log grammar's delimiters, and a file we cannot read back is worse
-    // than a refused write. One extra parse per write costs nothing at this size.
-    try {
-      parseIssue(text, path.relative(root, target));
-    } catch (err) {
-      throw new DzError(
-        'INVALID_FIELD',
-        `refusing to write ${path.relative(root, target)}: its content collides with the issue file format (${(err as Error).message})`,
-      );
-    }
-    fs.renameSync(tmp, target);
+    parseIssue(text, path.relative(root, target));
   } catch (err) {
-    if (fs.existsSync(tmp)) fs.rmSync(tmp, { force: true });
-    throw err;
+    throw new DzError(
+      'INVALID_FIELD',
+      `refusing to write ${path.relative(root, target)}: its content collides with the issue file format (${(err as Error).message})`,
+    );
   }
+  writeFileAtomic(target, text);
 }
 
 export interface LoadFailure {

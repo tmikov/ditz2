@@ -62,6 +62,28 @@ describe('parseLog', () => {
     expect(got[0].text).toBe('one\n\ntwo');
   });
 
+  it('preserves a blank line inside a comment when written as an empty line', () => {
+    const got = parseLog(
+      [`- 2026-08-22T11:40:12.887Z  ${AUTHOR}  comment`, '    one', '', '    two'],
+      'f.md',
+    );
+    expect(got[0].text).toBe('one\n\ntwo');
+  });
+
+  it('does not absorb the blank line separating a comment from the next entry', () => {
+    const got = parseLog(
+      [
+        `- 2026-08-22T11:40:12.887Z  ${AUTHOR}  comment`,
+        '    one',
+        '',
+        `- 2026-08-22T11:41:00.000Z  ${AUTHOR}  created`,
+      ],
+      'f.md',
+    );
+    expect(got[0].text).toBe('one');
+    expect(got[1].text).toBeNull();
+  });
+
   it('ignores truly empty separator lines between entries', () => {
     const got = parseLog(
       [`- 2026-08-22T09:14:03.221Z  ${AUTHOR}  created`, '', `- 2026-08-22T09:15:00.000Z  ${AUTHOR}  comment`],
@@ -98,6 +120,22 @@ describe('parseLog', () => {
   });
 });
 
+describe('renderLog', () => {
+  it('writes a blank line inside a comment as an empty line, not as indent', () => {
+    const out = renderLog([entry({ verb: 'comment', text: 'one\n\ntwo' })]);
+    expect(out).toBe(`- 2026-08-22T09:14:03.221Z  ${AUTHOR}  comment\n    one\n\n    two\n`);
+  });
+
+  it('never emits a line carrying trailing whitespace', () => {
+    const out = renderLog([
+      entry({ verb: 'comment', text: 'one\n\ntwo' }),
+      entry({ verb: 'comment', text: 'gap\n\n\nof two' }),
+      entry({ verb: 'status', detail: 'open -> closed (fixed)' }),
+    ]);
+    expect(out.split('\n').filter((l) => /[ \t]$/.test(l))).toEqual([]);
+  });
+});
+
 describe('renderLog round-trip', () => {
   it('round-trips every entry shape', () => {
     const entries: LogEntry[] = [
@@ -105,6 +143,7 @@ describe('renderLog round-trip', () => {
       entry({ verb: 'status', detail: 'open -> in-progress' }),
       entry({ verb: 'comment', text: 'line one\nline two' }),
       entry({ verb: 'comment', text: 'has\n\nblank line' }),
+      entry({ verb: 'comment', text: 'has\n\n\ntwo blank lines' }),
       entry({ verb: 'title', detail: 'old: with colon -> new' }),
     ];
     expect(parseLog(renderLog(entries).split('\n'), 'f.md')).toEqual(entries);

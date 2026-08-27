@@ -7,7 +7,7 @@
 
 import type { DzErrorCode } from '../core/errors.js';
 import type { Issue } from '../core/types.js';
-import type { Diagnosis } from '../store/doctor.js';
+import type { Diagnosis, Repair } from '../store/doctor.js';
 import type { LoadFailure } from '../store/issues.js';
 
 export function renderIssuesJson(issues: Issue[]): string {
@@ -42,7 +42,14 @@ export function renderWarningsJson(failures: LoadFailure[]): string {
   return `${JSON.stringify({ warnings })}\n`;
 }
 
-/** `dz doctor` results. Its own stdout payload, not a warning envelope. */
-export function renderDiagnosesJson(problems: Diagnosis[]): string {
-  return `${JSON.stringify({ problems }, null, 2)}\n`;
+/**
+ * `dz doctor` results. Its own stdout payload, not a warning envelope.
+ *
+ * `fixed` appears only under --fix. A caller that never passes the flag keeps
+ * reading exactly the object it read before, rather than having to ignore an
+ * empty array that can never be anything else.
+ */
+export function renderDiagnosesJson(problems: Diagnosis[], fixed?: Repair[]): string {
+  const payload = fixed === undefined ? { problems } : { fixed, problems };
+  return `${JSON.stringify(payload, null, 2)}\n`;
 }
