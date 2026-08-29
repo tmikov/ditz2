@@ -10,6 +10,7 @@ import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { DZ_BIN, dz, withTempProject } from '../helpers.js';
+import { SED_I, ptyPipeline, shq } from '../pty.js';
 
 /**
  * Where `dz edit` tells the operator their work went when the locked save
@@ -28,10 +29,6 @@ import { DZ_BIN, dz, withTempProject } from '../helpers.js';
  * transcript, and the answer waits until that writer has finished. `script -f`
  * is what makes the transcript readable while it is still being written.
  */
-
-function shq(value: string): string {
-  return `'${value.replace(/'/g, `'\\''`)}'`;
-}
 
 /** A bounded poll, so a missed condition fails the test rather than hanging. */
 function until(cond: string): string {
@@ -72,8 +69,8 @@ describe('dz edit names the scratch file when the locked save fails', () => {
         + 'component rm cli --force >/dev/null 2>&1\n'
         + `  touch ${shq(flag)}\n`
         + ') &\n'
-        + `sed -i 's/^title: .*/title: Someone Else/' ${shq(file)}\n`
-        + `sed -i 's/^title: .*/title: Mine/' "$1"\n`);
+        + `${SED_I} 's/^title: .*/title: Someone Else/' ${shq(file)}\n`
+        + `${SED_I} 's/^title: .*/title: Mine/' "$1"\n`);
       fs.chmodSync(editor, 0o755);
 
       // The prompt needs a real terminal, and the answer has to be withheld
@@ -83,8 +80,11 @@ describe('dz edit names the scratch file when the locked save fails', () => {
       const runner = path.join(dir, 'run.sh');
       fs.writeFileSync(runner,
         '#!/bin/sh\n'
-        + `( ${until(`[ -f ${shq(flag)} ]`)}; printf 'f\\n' ) `
-        + `| script -qefc ${shq(inner)} ${shq(transcript)}\n`);
+        + `${ptyPipeline(
+          `( ${until(`[ -f ${shq(flag)} ]`)}; printf 'f\\n' )`,
+          inner,
+          { transcript, flush: true },
+        )}\n`);
       fs.chmodSync(runner, 0o755);
 
       const r = spawnSync(runner, [], {
@@ -120,7 +120,7 @@ describe('dz edit names the scratch file when the locked save fails', () => {
       fs.writeFileSync(editor,
         '#!/bin/sh\n'
         + `printf 'held by someone' > ${shq(path.join(dir, 'dz', '.lock'))}\n`
-        + `sed -i 's/^title: .*/title: Mine/' "$1"\n`);
+        + `${SED_I} 's/^title: .*/title: Mine/' "$1"\n`);
       fs.chmodSync(editor, 0o755);
 
       const r = dz(['edit', id, '--json'], {

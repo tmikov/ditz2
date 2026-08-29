@@ -10,11 +10,12 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { dz, withTempProject } from '../helpers.js';
+import { SED_I } from '../pty.js';
 
 /** An $EDITOR that applies `sed` to whatever file it is given. */
 function editorApplying(dir: string, sedExpr: string): string {
   const bin = path.join(dir, `ed-${Math.random().toString(36).slice(2)}.sh`);
-  fs.writeFileSync(bin, `#!/bin/sh\nsed -i '${sedExpr}' "$1"\n`);
+  fs.writeFileSync(bin, `#!/bin/sh\n${SED_I} '${sedExpr}' "$1"\n`);
   fs.chmodSync(bin, 0o755);
   return bin;
 }
@@ -96,7 +97,7 @@ describe('dz edit', () => {
         `#!/bin/sh\n`
         + `cd "${dir}" && DZ_LOCK_TIMEOUT_MS=0 node "${dzBin}" add "made during edit" > "${probe}" 2>&1\n`
         + `echo "exit=$?" >> "${probe}"\n`
-        + `sed -i 's/^title: .*/title: Edited/' "$1"\n`);
+        + `${SED_I} 's/^title: .*/title: Edited/' "$1"\n`);
       fs.chmodSync(bin, 0o755);
 
       const r = dz(['edit', id], { cwd: dir, env: { EDITOR: bin } });
@@ -113,8 +114,8 @@ describe('dz edit', () => {
       fs.writeFileSync(bin,
         `#!/bin/sh\n`
         // Change the real file behind the editor's back, then edit the scratch.
-        + `sed -i 's/^title: .*/title: Changed By Someone Else/' "${file}"\n`
-        + `sed -i 's/^title: .*/title: My Edit/' "$1"\n`);
+        + `${SED_I} 's/^title: .*/title: Changed By Someone Else/' "${file}"\n`
+        + `${SED_I} 's/^title: .*/title: My Edit/' "$1"\n`);
       fs.chmodSync(bin, 0o755);
 
       const r = dz(['edit', id, '--json'], { cwd: dir, env: { EDITOR: bin } });
@@ -165,7 +166,7 @@ describe('dz edit', () => {
 `
         + `cd "${dir}" && node "${dzBin}" component rm cli --force >/dev/null 2>&1
 `
-        + `sed -i 's/^title: .*/title: Edited/' "$1"
+        + `${SED_I} 's/^title: .*/title: Edited/' "$1"
 `);
       fs.chmodSync(bin, 0o755);
 

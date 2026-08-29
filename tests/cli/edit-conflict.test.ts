@@ -10,28 +10,28 @@ import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { DZ_BIN, dz, withTempProject } from '../helpers.js';
+import { SED_I, ptySpawn, shq } from '../pty.js';
 
 /**
  * What `dz edit` does when the issue changed while the editor was open.
  *
  * The interactive half needs a real terminal, because the prompt is gated on
  * `process.stdin.isTTY` — a pipe is exactly the case that must NOT prompt.
- * `script -qec` allocates a pty and runs the command inside it, which is the
- * only way to exercise the path an actual user takes. It merges stdout and
- * stderr into the one pty, so those tests assert on combined output and, more
+ * `script` allocates a pty and runs the command inside it, which is the only
+ * way to exercise the path an actual user takes. It merges stdout and stderr
+ * into the one pty, so those tests assert on combined output and, more
  * importantly, on what ends up on disk.
  */
-
-function shq(value: string): string {
-  return `'${value.replace(/'/g, `'\\''`)}'`;
-}
 
 interface Run { output: string; code: number }
 
 /** Runs dz attached to a pty, feeding `input` as the operator's typing. */
 function ptyDz(args: string[], cwd: string, input: string, editor: string): Run {
   const cmd = [process.execPath, DZ_BIN, ...args].map(shq).join(' ');
-  const r = spawnSync('script', ['-qec', cmd, '/dev/null'], {
+  // spawnSync closes stdin the moment `input` is written, which is too early
+  // to be the operator's end of input — hence holdEof.
+  const { file, args: argv } = ptySpawn(cmd, { holdEof: true });
+  const r = spawnSync(file, argv, {
     cwd,
     input,
     encoding: 'utf8',
@@ -48,8 +48,8 @@ function racingEditor(dir: string, target: string, title: string): string {
   const bin = path.join(dir, `ed-race-${Math.random().toString(36).slice(2)}.sh`);
   fs.writeFileSync(bin,
     '#!/bin/sh\n'
-    + `sed -i 's/^title: .*/title: Someone Else/' ${shq(target)}\n`
-    + `sed -i 's/^title: .*/title: ${title}/' "$1"\n`);
+    + `${SED_I} 's/^title: .*/title: Someone Else/' ${shq(target)}\n`
+    + `${SED_I} 's/^title: .*/title: ${title}/' "$1"\n`);
   fs.chmodSync(bin, 0o755);
   return bin;
 }
@@ -191,10 +191,10 @@ describe('dz edit prompts on a terminal', () => {
         '#!/bin/sh\n'
         + `n=$(cat ${shq(counter)} 2>/dev/null || echo 0); n=$((n+1)); echo $n > ${shq(counter)}\n`
         + 'if [ "$n" = 1 ]; then\n'
-        + `  sed -i 's/^assignee: .*/assignee: someone-else/' ${shq(file)}\n`
-        + "  sed -i 's/^title: .*/title: My First Try/' \"$1\"\n"
+        + `  ${SED_I} 's/^assignee: .*/assignee: someone-else/' ${shq(file)}\n`
+        + `  ${SED_I} 's/^title: .*/title: My First Try/' "$1"\n`
         + 'else\n'
-        + "  sed -i 's/^title: .*/title: Reloaded Edit/' \"$1\"\n"
+        + `  ${SED_I} 's/^title: .*/title: Reloaded Edit/' "$1"\n`
         + 'fi\n');
       fs.chmodSync(bin, 0o755);
 

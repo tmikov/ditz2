@@ -10,6 +10,7 @@ import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { DZ_BIN, dz, withTempProject } from '../helpers.js';
+import { SED_I, ptyPipeline, shq } from '../pty.js';
 
 /**
  * What `dz edit` claims after a forced save that was itself refused.
@@ -27,10 +28,6 @@ import { DZ_BIN, dz, withTempProject } from '../helpers.js';
  * is. `script -f` is what makes the transcript readable while it is still
  * being written.
  */
-
-function shq(value: string): string {
-  return `'${value.replace(/'/g, `'\\''`)}'`;
-}
 
 /** A bounded poll, so a missed condition fails the test rather than hanging. */
 function until(cond: string): string {
@@ -60,11 +57,11 @@ describe('dz edit on a double race', () => {
         '#!/bin/sh\n'
         + '(\n'
         + `  ${until(`grep -q 'changed while your editor was open' ${shq(transcript)} 2>/dev/null`)}\n`
-        + `  sed -i 's/^title: .*/title: Third Party/' ${shq(file)}\n`
+        + `  ${SED_I} 's/^title: .*/title: Third Party/' ${shq(file)}\n`
         + `  touch ${shq(flag)}\n`
         + ') &\n'
-        + `sed -i 's/^title: .*/title: Someone Else/' ${shq(file)}\n`
-        + `sed -i 's/^title: .*/title: Mine/' "$1"\n`);
+        + `${SED_I} 's/^title: .*/title: Someone Else/' ${shq(file)}\n`
+        + `${SED_I} 's/^title: .*/title: Mine/' "$1"\n`);
       fs.chmodSync(editor, 0o755);
 
       // The answer is withheld until that second change has landed. Only one
@@ -74,8 +71,11 @@ describe('dz edit on a double race', () => {
       const runner = path.join(dir, 'run.sh');
       fs.writeFileSync(runner,
         '#!/bin/sh\n'
-        + `( ${until(`[ -f ${shq(flag)} ]`)}; printf 'f\\n' ) `
-        + `| script -qefc ${shq(inner)} ${shq(transcript)}\n`);
+        + `${ptyPipeline(
+          `( ${until(`[ -f ${shq(flag)} ]`)}; printf 'f\\n' )`,
+          inner,
+          { transcript, flush: true },
+        )}\n`);
       fs.chmodSync(runner, 0o755);
 
       const r = spawnSync(runner, [], {

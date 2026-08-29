@@ -11,6 +11,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { ptySpawn, shq } from '../../tests/pty.js';
 
 /**
  * The built binaries, in a pty, against a project on disk.
@@ -18,14 +19,18 @@ import { fileURLToPath } from 'node:url';
  * ink-testing-library renders to a string, which is exactly the environment
  * gap that hid the link(2) and global-crypto failures in this repository. Ink
  * needs a real terminal: it queries the tty for its size and puts stdin into
- * raw mode, neither of which a pipe supports. `script -qec` allocates one, the
- * same technique tests/cli/edit-conflict.test.ts already uses.
+ * raw mode, neither of which a pipe supports. `script` allocates one, the same
+ * technique tests/cli/edit-conflict.test.ts already uses.
+ *
+ * `ptySpawn` comes from the root package's test helpers rather than being
+ * spelled again here: `script` takes a different command line on each of the
+ * two platforms this suite runs on, and a second copy of that decision is the
+ * bug CLAUDE.md's rule about checkers holding their own copy of a rule
+ * describes.
  */
 const here = path.dirname(fileURLToPath(import.meta.url));
 const DZ = path.resolve(here, '..', '..', 'dist', 'cli', 'main.js');
 const DZUI = path.resolve(here, '..', 'dist', 'main.js');
-
-const shq = (v: string): string => `'${v.replace(/'/g, `'\\''`)}'`;
 
 /**
  * ANSI escapes carry cursor moves and colour; assertions want the text.
@@ -78,17 +83,20 @@ function pty(
 ): Promise<Run> {
   return new Promise((resolve) => {
     const cmd = argv.map(shq).join(' ');
-    const child = spawn('script', ['-qec', cmd, '/dev/null'], {
-      cwd,
-      env: {
-        ...process.env,
-        DZ_AUTHOR: 'Test User <test@example.com>',
-        TERM: 'xterm-256color',
-        COLUMNS: '100',
-        LINES: '30',
-        ...envOverrides,
-      },
-    });
+    const env = {
+      ...process.env,
+      DZ_AUTHOR: 'Test User <test@example.com>',
+      TERM: 'xterm-256color',
+      COLUMNS: '100',
+      LINES: '30',
+      ...envOverrides,
+    };
+    // COLUMNS/LINES are what util-linux sizes the pty from; ptySpawn needs
+    // them separately because BSD script ignores them and has to be told with
+    // stty instead. Passing the merged values keeps the two in step, including
+    // when an override deletes them.
+    const { file, args } = ptySpawn(cmd, { cols: env.COLUMNS, rows: env.LINES });
+    const child = spawn(file, args, { cwd, env });
 
     let out = '';
     let exited = false;
@@ -122,11 +130,19 @@ function pty(
       child.stdout.on('data', onData);
     });
     const closed = new Promise<void>((r) => { child.once('close', () => r()); });
+    // A command that dies before drawing cannot be waited for: on darwin the
+    // `cat` in ptySpawn is still holding the pipeline open, so `closed` cannot
+    // fire until this function stops typing and closes stdin. Giving up on the
+    // frame after a bounded wait is what breaks that cycle. It is not a race
+    // against a slow first frame — a live UI draws one in well under this, and
+    // the only cost of the bound elapsing is that the run had already failed.
+    const NO_FRAME_MS = 2000;
+    const noFrame = new Promise<void>((r) => { setTimeout(r, NO_FRAME_MS); });
 
     void (async () => {
       // Whichever comes first: a frame to type into, or an exit before one
       // was ever drawn (the "refuses to open outside a project" case).
-      await Promise.race([firstFrame, closed]);
+      await Promise.race([firstFrame, closed, noFrame]);
       if (!exited) {
         // The synchronized-update marker means Ink has written a frame, not
         // that raw mode is active yet: Ink enables it from an effect that
@@ -149,6 +165,10 @@ function pty(
         }
         await new Promise((r) => { setTimeout(r, 40); });
       }
+      // Required on darwin, harmless elsewhere: nothing more will be typed, so
+      // release the `cat` feeding the pty and let the pipeline finish. `script`
+      // itself survives its stdin closing, so this does not cut the run short.
+      try { child.stdin.end(); } catch { /* already gone */ }
     })();
   });
 }
@@ -199,8 +219,12 @@ function requirePgrep(): void {
 function ptyKilled(argv: string[], cwd: string, signal: NodeJS.Signals): Promise<Run> {
   return new Promise((resolve) => {
     const cmd = argv.map(shq).join(' ');
-    const child = spawn('script', ['-qec', cmd, '/dev/null'], {
+    // Nothing is ever typed here, so the pty takes its input from /dev/null.
+    // That also keeps the process tree single-file, which findLeafPid needs.
+    const { file, args } = ptySpawn(cmd, { cols: '100', rows: '30', noStdin: true });
+    const child = spawn(file, args, {
       cwd,
+      stdio: ['ignore', 'pipe', 'pipe'],
       env: {
         ...process.env,
         DZ_AUTHOR: 'Test User <test@example.com>',

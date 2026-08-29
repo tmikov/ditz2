@@ -5,9 +5,35 @@ when you finish a chunk of work, and distrust anything here that the repository
 contradicts. Durable knowledge belongs in `CLAUDE.md`, the specs, or the issue
 tracker; this file is only the part that changes.
 
-**Last updated:** 2026-08-27, at commit `68e78c8cc731`.
+**Last updated:** 2026-08-29, on `master` at commit `7890b35` (uncommitted).
 
 ## State
+
+**The suites now run on macOS as well as Linux.** They did not before: every
+`dz edit` test and the whole UI end-to-end file failed there, on two GNU-only
+assumptions that a Linux CI could never surface. `tests/pty.ts` is new and is
+the only place either is decided; `tests/pty.test.ts` pins the Linux command
+lines so that the branch the local machine does not take cannot rot unnoticed.
+`CLAUDE.md` has the three BSD behaviours this cost, which are not guessable
+from the man pages alone.
+
+Also new, and unrelated to that: 129 of `package-lock.json`'s `resolved` URLs
+pointed at a private registry mirror rather than the public one, so `npm ci`
+could not install anywhere without credentials for it — and `--registry` does
+not override a `resolved` URL. They are all on `registry.npmjs.org` now.
+**A lockfile regenerated against a private mirror will reintroduce this**, so
+check before committing one:
+
+```bash
+grep -c 'registry.npmjs.org' package-lock.json   # should equal the entry count
+```
+
+Counts as of this update: **401 tests** in the root package, **167** in `ui/`
+(568 total), both typechecks clean. Verified on macOS across twelve consecutive
+full runs, plus fifteen of the three timing-sensitive pty files alone, after one
+real flake was found and fixed.
+
+### Earlier state
 
 Plan 2a (`docs/superpowers/plans/2026-08-26-ditz2-ui-browse.md`) shipped:
 `ditz2-ui` is a real Ink terminal UI — browse, filter, read and refresh a
@@ -22,8 +48,9 @@ component's line count had accounted for), `pad` truncates an overlong
 assertion in `src/cli/ui.test.ts` was replaced with one that actually fails on
 the mutation it was meant to catch.
 
-Tree clean. **381 tests passing** in the root package, **118 tests passing**
-in `ui/` (499 total); typecheck and `the linter` clean in both packages.
+Tree clean at that point, with **381 tests passing** in the root package and
+**118** in `ui/`; both typechecks clean. (Superseded by the
+counts above — those were taken on Linux, before the macOS work.)
 
 Re-derive rather than trusting the hashes above:
 
@@ -92,6 +119,11 @@ package's script is bare `false` still makes `npm run` exit `0`, both `cd`'ed
 into the member and via `--workspace` from the root. This is a known class of
 npm-workspaces bug, fixed in later npm releases; nothing here works around it.
 
+**This is npm 8, not a property of the scripts.** On macOS with
+npm 11.4.2 the exit status propagates correctly: `npm run test:ui` was observed
+exiting 1 on a failing UI typecheck and 0 when clean. The warning below applies
+wherever npm 8 is still in play.
+
 Concretely, this means **`npm run test:all`, `npm run test:ui` and `npm run
 typecheck --workspace ditz2-ui` cannot be trusted as pass/fail gates** — a
 typecheck or test failure inside `ui/` prints its error to the log and then the
@@ -107,8 +139,10 @@ the wrapper scripts, for exactly this reason.
 
 Parked by review as non-blocking:
 
-- `shq` and `until` helpers are duplicated between
-  `tests/cli/edit-double-race.test.ts` and `tests/cli/edit-scratch-path.test.ts`.
+- `until` is still duplicated between `tests/cli/edit-double-race.test.ts` and
+  `tests/cli/edit-scratch-path.test.ts`. `shq` no longer is — the portability
+  work needed it in `tests/pty.ts`, so all four callers now import it from
+  there, `ui/tests/e2e.test.ts` included.
 - `parseEdit` hardcodes `'the edited text'` as its parse source label
   (`src/api/write.ts:160`), because the facade must not know about the CLI's
   scratch file.

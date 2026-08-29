@@ -7,15 +7,8 @@ finish a chunk of work.
 
 ## Toolchain
 
-This is a an internal development host. Before any `node`, `npm` or `npx`:
-
-```bash
-source the local bootstrap script
-```
-
-System Node is v16; the script puts a vendored Node 21 ahead of it and points npm
-at the internal registry mirror. `facebook/README.md` explains why. Running the
-already-built `./dist/cli/main.js` does not need it.
+Any Node >= 20 and the public npm registry. Nothing else is required, and the
+already-built `./dist/cli/main.js` needs no toolchain at all.
 
 ```bash
 npm ci
@@ -96,6 +89,35 @@ Hence two standing rules: integration tests spawn the **built binary**, not the
 TypeScript sources, and `tests/cli/repo-filesystem.test.ts` runs a project on
 the checkout's own filesystem. On an ordinary clone it is redundant; here it is
 the only test that would have caught the `link(2)` failure.
+
+## The tests run on two Unixes, and the shell tools differ on both
+
+`sed -i` and `script` are spelled differently by GNU and BSD, and both are used
+from generated `$EDITOR` scripts and pty runners where a wrong spelling is not
+a portability warning — it is an editor that silently changed nothing, or a
+`script` that never started. The whole `dz edit` suite failed on macOS this way
+while passing on Linux.
+
+**Never write `sed -i` or `script` in a test. Import from `tests/pty.ts`**,
+which is the single place either spelling is decided, and which takes the
+platform as an argument so that `tests/pty.test.ts` can pin the Linux command
+lines from a Mac. That pinning is the point: whichever machine you are on, one
+of the two branches is dead code no other test would notice breaking.
+
+Three BSD behaviours that are not in the obvious diff between the two, all
+confirmed against the built binaries rather than assumed:
+
+- BSD `script` reads its stdin with `tcgetattr` and refuses a socket — which is
+  exactly what libuv hands a spawned child for `stdio: 'pipe'`. An interposed
+  `cat`, whose stdout is an ordinary pipe, is the way round it; the cost is
+  that the caller must then close stdin, or the pipeline outlives the command.
+- BSD `script` pushes an EOT into the pty when its own input ends, so a feed
+  that exits right after writing an answer can deliver end-of-input ahead of
+  the answer. The reader takes its no-answer path and the test measures the
+  wrong branch. `a)bort: ^Df` in a transcript is what that looks like.
+- BSD `script` gives the pty no winsize when its stdout is not a terminal;
+  util-linux falls back to `COLUMNS`/`LINES`. `stty` inside the pty is the fix,
+  and it must stay off when a test wants a terminal that reports no size.
 
 ## A checker must never hold its own copy of the rule it checks
 

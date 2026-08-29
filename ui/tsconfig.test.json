@@ -1,9 +1,10 @@
 {
   "//": "Typechecks the test files, which tsconfig.json excludes so they stay out of dist/. Vitest transpiles without typechecking, so without this a type error in a test is invisible.",
+  "//rootDir": "The parent, not '.', only because tests/e2e.test.ts imports the root package's tests/pty.ts — the one place the two platforms' `script` command lines are decided, which must not be spelled a second time here. Nothing is emitted from this config, so rootDir does no more than permit that file.",
   "extends": "./tsconfig.json",
   "compilerOptions": {
     "noEmit": true,
-    "rootDir": "."
+    "rootDir": ".."
   },
   "include": ["src/**/*.ts", "src/**/*.tsx", "tests/**/*.ts", "tests/**/*.tsx"],
   "exclude": []
