@@ -23,7 +23,30 @@ npm run typecheck && npm run build && npx vitest run
 rm -rf .dz-fstest          # one test writes this scratch dir in the checkout
 ```
 
-Source control is the local VCS, never git. Pass `--reason` to every `sl` command.
+If you are on a host whose npm is pointed at a private mirror, or which pins an
+older Node, keep that setup in an untracked `CLAUDE.local.md` — it is specific
+to your machine, not to this project, and this repository is public.
+
+The UI lives in a second workspace, `ui/` (package `ditz2-ui`). It imports
+`ditz2` through the published `exports` map, so `dist/` must be current:
+
+```bash
+npm run test:ui     # builds ditz2, then typechecks, builds and tests ditz2-ui
+npm run test:all    # both packages, both test suites, both typechecks
+```
+
+`test:ui` typechecks `ui/tests/` as well as `ui/src/`. `ui/tsconfig.json`
+excludes the tests and vitest does not typecheck, so without that step a type
+error in a UI test is invisible.
+
+`test:ui` calls `tsc` and `vitest` directly (`tsc -p ui/tsconfig.json`,
+`tsc -p ui/tsconfig.test.json`, `vitest run --root ui`) rather than `npm run
+<script> --workspace ditz2-ui`. npm 8 discards the exit status of any
+workspace-member script, including one run by `cd`ing into the member directory
+by hand: the failure is printed but the wrapping `npm run` still exits 0. npm
+11 propagates it correctly. If you are on npm 8 and run `ui/`'s own
+`npm run build`/`typecheck`/`test` scripts directly instead of through the root
+`test:ui`, read the output — do not trust `$?`.
 
 ---
 

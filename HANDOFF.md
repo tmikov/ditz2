@@ -5,12 +5,25 @@ when you finish a chunk of work, and distrust anything here that the repository
 contradicts. Durable knowledge belongs in `CLAUDE.md`, the specs, or the issue
 tracker; this file is only the part that changes.
 
-**Last updated:** 2026-08-26, at commit `f3e403e349d1`.
+**Last updated:** 2026-08-27, at commit `68e78c8cc731`.
 
 ## State
 
-21 draft commits on public base `b5f861f5f772`. Tree clean. **366 tests
-passing** across 28 files; typecheck and `the linter` clean.
+Plan 2a (`docs/superpowers/plans/2026-08-26-ditz2-ui-browse.md`) shipped:
+`ditz2-ui` is a real Ink terminal UI — browse, filter, read and refresh a
+backlog — with two entry points (`runUi()` for `dz ui`, and the `dzui` binary)
+and a pty end-to-end suite that runs the **built binaries**, not
+`ink-testing-library`'s string rendering, against a real project on disk.
+
+The final whole-branch review's fix wave has also landed: `App` now reserves
+`CHROME_ROWS = 4` (the fourth row is `<Detail>`'s own top border, which no
+component's line count had accounted for), `pad` truncates an overlong
+`component` value instead of shifting the columns after it, and a vacuous
+assertion in `src/cli/ui.test.ts` was replaced with one that actually fails on
+the mutation it was meant to catch.
+
+Tree clean. **381 tests passing** in the root package, **118 tests passing**
+in `ui/` (499 total); typecheck and `the linter` clean in both packages.
 
 Re-derive rather than trusting the hashes above:
 
@@ -41,13 +54,17 @@ be a `Project` method.
 
 ## Next
 
-Plan two of `docs/superpowers/specs/2026-08-25-ditz2-tui-design.md`: the
-`ditz2-ui` package, an Ink-based terminal UI. Designed and approved, no
-implementation plan written yet. Plan one — the API facade — is what shipped;
-its plan is at `docs/superpowers/plans/2026-08-25-ditz2-api-facade.md`.
+Plan 2b, from `docs/superpowers/specs/2026-08-25-ditz2-tui-design.md`: the form
+screen, `add`/`set`/`comment`/`close` from inside the UI, the `$EDITOR`
+suspend-without-unmount sequence, the conflict overlay, and the lock-wait state
+with its holder, timer and cancel key. `UiState.screen`, `UiState.overlay` and
+the missing `waitingFor` field are shaped so each of these is an addition
+rather than a rewrite — but plan 2b itself has no implementation plan written
+yet.
 
-Two of that spec's riskiest assumptions were spiked before it was written and
-the results are recorded in it:
+Before writing that plan, re-run the spike behind these two spec assumptions on
+Ink 6.8.0 (the spec measured Ink 7.1.1, which this project cannot install — see
+"Deviations from the spec" in the plan 2a document):
 
 - Ink's suspend-to-`$EDITOR` works **without unmounting**. The obvious
   `unmount()` then `rerender()` silently drops state updates and resumes
@@ -55,7 +72,7 @@ the results are recorded in it:
 - `ink-testing-library` renders to a plain string and accepts synthetic keys,
   so the UI is testable to the same standard as everything else here.
 
-## Open question
+## Open questions
 
 `package.json` declares `engines: ">=20"`, and both READMEs justify it by
 `uuid@11` reading a global `crypto` absent below that. **That does not
@@ -67,6 +84,25 @@ Either the floor is wrong or it is justified by a case this machine does not
 exhibit. It is the one place the repository currently documents something there
 is evidence against. Settle it before anyone relies on the explanation.
 
+**`npm run <script> --workspace <name>` — and even a plain `npm run <script>`
+run from inside a workspace member directory — reports exit code `0` on this
+machine's npm (8.19.4) even when the script fails.** Confirmed with a minimal
+reproduction outside this repository: a two-package workspace where the member
+package's script is bare `false` still makes `npm run` exit `0`, both `cd`'ed
+into the member and via `--workspace` from the root. This is a known class of
+npm-workspaces bug, fixed in later npm releases; nothing here works around it.
+
+Concretely, this means **`npm run test:all`, `npm run test:ui` and `npm run
+typecheck --workspace ditz2-ui` cannot be trusted as pass/fail gates** — a
+typecheck or test failure inside `ui/` prints its error to the log and then the
+overall command still exits `0`. Verified directly: introducing `const n:
+number = 'x';` into a `ui/tests/*.ts` file makes `npm run test:all` print
+`error TS2322` and then finish with exit status `0`. Anyone scripting CI around
+these commands must check the log text, not the exit code, until npm is
+upgraded. `npm run test` (root, no workspace) and directly-invoked `npx vitest
+run` / `npx tsc` are unaffected — this task's own verification used those, not
+the wrapper scripts, for exactly this reason.
+
 ## Loose ends
 
 Parked by review as non-blocking:
@@ -76,11 +112,34 @@ Parked by review as non-blocking:
 - `parseEdit` hardcodes `'the edited text'` as its parse source label
   (`src/api/write.ts:160`), because the facade must not know about the CLI's
   scratch file.
+- `lockTimeoutMs: 0` in `ui/src/index.tsx` is set but **not covered by any
+  test**, because plan 2a performs no writes, so nothing can ever contend the
+  lock. Verified by deliberately changing it to `2000`: the full `ui/` suite
+  still passes. Plan 2b's first mutation test must assert that a contended lock
+  surfaces as `LOCKED` immediately rather than after a two-second freeze.
+- The `assignee:me` email-part rule in `ui/src/query.ts` is a guess about how
+  people write assignees. Revisit it once the UI has been used.
 
 One issue is open in the tracker and correctly so — run `dz list` to see it. It
 is the lazily built sqlite cache for `list` and `grep`: `loadAllIssues` takes
 50-125 ms over 200 issues and scales linearly, which is the first ceiling a TUI
 refresh will hit.
+
+## Plan 2b must pick a different key for the form
+
+The design spec binds `Enter` on the list screen to "open the form". Task 12
+took `Enter` for reading instead: it opens the selected issue full-screen and
+scrollable, because the detail pane clips long issues and there was no way to
+read one without leaving the UI for `dz show`.
+
+So plan 2b needs another binding. `e` is already the spec's key for "body in
+`$EDITOR`", so the candidates are `Tab` or `Ctrl-E`. Whichever it is, the
+footer and the `?` overlay both have to name it — there are tests refusing a
+footer that advertises keys which do nothing, and Task 12 added the mirror of
+that rule for a working key nobody advertises.
+
+`Enter` also closes the issue view, so 2b should not assume it is free there
+either.
 
 ## Where the rest lives
 

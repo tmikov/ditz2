@@ -25,6 +25,7 @@ import { registerInit } from './init.js';
 import { registerList } from './list.js';
 import { registerSet } from './set.js';
 import { registerShow } from './show.js';
+import { registerUi } from './ui.js';
 import { registerUnlock } from './unlock.js';
 
 export function buildProgram(ctx: CliContext): Command {
@@ -61,6 +62,7 @@ export function buildProgram(ctx: CliContext): Command {
   registerComponent(program, ctx);
   registerSchema(program, ctx);
   registerUnlock(program, ctx);
+  registerUi(program, ctx);
   // Last, so `program.commands` is fully populated when `help <command>`
   // looks a name up.
   registerHelp(program, ctx);

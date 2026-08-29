@@ -22,11 +22,17 @@
   "files": [
     "dist"
   ],
+  "workspaces": [
+    "ui",
+    "."
+  ],
   "scripts": {
     "build": "tsc -p tsconfig.json && chmod +x dist/cli/main.js",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json",
     "test:unit": "vitest run src",
-    "test": "npm run build && vitest run"
+    "test": "npm run build && vitest run",
+    "test:ui": "npm run build && tsc -p ui/tsconfig.json && chmod +x ui/dist/main.js && tsc -p ui/tsconfig.test.json && vitest run --root ui",
+    "test:all": "npm test && npm run test:ui"
   },
   "dependencies": {
     "commander": "^14.0.3",

@@ -67,6 +67,11 @@ const TUTORIAL = `dz tutorial — one session, in order.
   dz schema
       Prints the JSON Schema for every --json payload.
 
+  dz ui
+      Opens a full-screen terminal UI for browsing the backlog, if the separate
+      ditz2-ui package is installed. It needs a terminal, and everything it can
+      do the commands above can already do.
+
 Then commit dz/ along with your code. Every command also accepts --json.
 Run 'dz help agents' for the machine-readable contract.
 `;
@@ -82,7 +87,8 @@ CONTRACT
       an "error" key, a "warnings" key, or both. Parse it whole; do not split
       it into lines.
   So when the exit code is 0 you may parse stdout unconditionally.
-  Exception: 'dz help' output is prose, never JSON.
+  Exceptions: 'dz help' output is prose, never JSON, and 'dz ui' is
+      interactive and rejects --json with INVALID_FIELD.
 
 EXIT CODES
   0  success

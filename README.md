@@ -277,6 +277,15 @@ spaces, which is what put trailing whitespace in existing projects.
 Note: `dz init` starts a project with an empty component list, so `--component` on `add`/`set`
 rejects every value until you run `dz component add <name>`.
 
+### A terminal UI
+
+`dz ui` opens a full-screen browser for the backlog. It lives in a separate
+package so that the CLI keeps its three dependencies — Ink and React are 38
+packages and about 23 MB.
+
+Neither package is published yet; see [ui/README.md](ui/README.md) for how to
+build and run it from a clone.
+
 ## Using ditz2 from Node
 
 `ditz2` publishes a small synchronous API alongside the `dz` command. It is the
