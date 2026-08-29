@@ -12,6 +12,7 @@ import { randomUUID } from 'node:crypto';
 import { isIsoTimestamp } from '../core/clock.js';
 import { DzError } from '../core/errors.js';
 import { sleepSync } from '../core/sleep.js';
+import type { Env } from '../core/types.js';
 import { dzDir } from './root.js';
 
 const LOCK_VERSION = 1;
@@ -117,7 +118,7 @@ export function lockState(root: string): LockState {
   return { kind: 'active', info };
 }
 
-function timeoutMs(env: NodeJS.ProcessEnv): number {
+function timeoutMs(env: Env): number {
   const raw = env['DZ_LOCK_TIMEOUT_MS'];
   if (raw === undefined || raw.trim() === '') return DEFAULT_TIMEOUT_MS;
   const parsed = Number(raw);
@@ -134,7 +135,7 @@ function describe(info: LockInfo): string {
 export function acquireLock(
   root: string,
   command: string,
-  env: NodeJS.ProcessEnv,
+  env: Env,
 ): LockHandle {
   const file = lockPath(root);
   const deadline = Date.now() + timeoutMs(env);

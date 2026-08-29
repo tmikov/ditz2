@@ -277,6 +277,33 @@ spaces, which is what put trailing whitespace in existing projects.
 Note: `dz init` starts a project with an empty component list, so `--component` on `add`/`set`
 rejects every value until you run `dz component add <name>`.
 
+## Using ditz2 from Node
+
+`ditz2` publishes a small synchronous API alongside the `dz` command. It is the
+same code the CLI runs, so anything you can do here you can do at the command
+line and vice versa.
+
+```js
+import { openProject } from 'ditz2';
+
+const dz = openProject(process.cwd(), { env: process.env });
+
+for (const issue of dz.list({ status: 'open' }).issues) {
+  console.log(issue.id, issue.title);
+}
+
+dz.set('01a031ea', { status: 'in-progress', assignee: 'me@example.com' });
+```
+
+Only this entry point is public. `dz/`'s internals — the store, the parser, the
+renderers — are not importable and change without notice.
+
+Every method is synchronous, and mutating ones take the project lock for the
+duration of their read-modify-write. Pass `lockTimeoutMs: 0` if you would
+rather handle contention yourself than have the call sleep: it then throws a
+`LOCKED` error immediately instead of waiting. A long-running UI should always
+do this, because a synchronous wait blocks its event loop.
+
 ## License
 
 MIT. Copyright (c) 2026 Tzvetan Mikov. See [LICENSE](LICENSE) for the full text; every

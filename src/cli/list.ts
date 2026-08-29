@@ -6,15 +6,15 @@
  */
 
 import type { Command } from 'commander';
+import { listIssues } from '../api/read.js';
+import type { Filter } from '../api/filter.js';
 import { EXIT_USER_ERROR } from '../core/errors.js';
 import { renderIssueList, renderWarnings } from '../render/human.js';
 import { renderIssuesJson, renderWarningsJson } from '../render/json.js';
-import { loadAllIssues } from '../store/issues.js';
 import type { LoadFailure } from '../store/issues.js';
 import { findProjectRoot } from '../store/root.js';
 import type { CliContext } from './context.js';
-import { addFilterOptions, applyFilters } from './filters.js';
-import type { ListFilters } from './filters.js';
+import { addFilterOptions } from './filters.js';
 
 /** Shared by list and grep: warn about skipped files and mark the run failed. */
 export function reportFailures(ctx: CliContext, failures: LoadFailure[]): void {
@@ -27,11 +27,10 @@ export function reportFailures(ctx: CliContext, failures: LoadFailure[]): void {
 
 export function registerList(program: Command, ctx: CliContext): void {
   const cmd = program.command('list').description('list issues');
-  addFilterOptions(cmd).action((opts: ListFilters) => {
-    const root = findProjectRoot(ctx.cwd);
-    const { issues, failures } = loadAllIssues(root);
-    const shown = applyFilters(issues, opts);
-    ctx.stdout.write(ctx.json ? renderIssuesJson(shown) : renderIssueList(shown));
+  addFilterOptions(cmd).action((opts: Filter) => {
+    const session = { root: findProjectRoot(ctx.cwd), env: ctx.env };
+    const { issues, failures } = listIssues(session, opts);
+    ctx.stdout.write(ctx.json ? renderIssuesJson(issues) : renderIssueList(issues));
     reportFailures(ctx, failures);
   });
 }

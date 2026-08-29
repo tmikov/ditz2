@@ -10,17 +10,15 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import type { Command } from 'commander';
+import { parseEdit, readForEdit, saveEdited, type SaveResult } from '../api/write.js';
 import { DzError } from '../core/errors.js';
-import { parseIssue } from '../core/serialize.js';
 import type { Issue } from '../core/types.js';
-import { validateEnum, validateIssue } from '../core/validate.js';
+import { validateEnum } from '../core/validate.js';
 import { shortId } from '../render/human.js';
 import { renderIssueJson } from '../render/json.js';
-import { loadConfig } from '../store/config.js';
-import { findIssue, issuePath, writeIssue } from '../store/issues.js';
+import { issuePath } from '../store/issues.js';
 import { findProjectRoot } from '../store/root.js';
 import type { CliContext } from './context.js';
-import { withProjectLock } from './lock.js';
 import { canPrompt, choose } from './prompt.js';
 
 /** POSIX single-quoting, so a path containing spaces survives `shell: true`. */
@@ -57,7 +55,10 @@ export function registerEdit(program: Command, ctx: CliContext): void {
         : validateEnum(opts.onConflict, CONFLICT_CHOICES, 'on-conflict');
 
       const root = findProjectRoot(ctx.cwd);
-      const target = issuePath(root, findIssue(root, prefix).id);
+      const session = { root, env: ctx.env };
+      const source = readForEdit(session, prefix);
+      const original = source.issue;
+      const target = issuePath(root, original.id);
       const rel = path.relative(root, target);
 
       // Outside dz/issues on purpose: a *.md file there is read as an issue.
@@ -69,8 +70,7 @@ export function registerEdit(program: Command, ctx: CliContext): void {
        * The bytes the scratch file was derived from. A write is safe only
        * while the file on disk still matches this; `reload` moves it forward.
        */
-      let baseline = fs.readFileSync(target, 'utf8');
-      const originalId = parseIssue(baseline, rel).id;
+      let baseline: string | null = source.baseline;
       fs.writeFileSync(scratch, baseline, 'utf8');
 
       /** Keeps a copy that would otherwise be lost, and returns where. */
@@ -99,25 +99,10 @@ export function registerEdit(program: Command, ctx: CliContext): void {
         }
       };
 
-      /** Parses and checks the scratch file, reporting failures against it. */
+      /** parseEdit, with failures pointed back at the scratch file. */
       const readEdited = (): Issue => {
         try {
-          // Named as the scratch, not the target: the content being parsed here
-          // is what the user just saved to the scratch file.
-          const issue = parseIssue(fs.readFileSync(scratch, 'utf8'), scratch);
-          // writeIssue picks its destination from issue.id, and parseIssue does
-          // not check the id against the filename — only readIssue does, and
-          // this path bypasses it. A changed id would leave the original alone,
-          // create a second issue, and silently overwrite any issue using it.
-          if (issue.id !== originalId) {
-            throw new DzError(
-              'INVALID_FIELD',
-              `the id may not be changed by an edit: it was "${originalId}" and is now `
-              + `"${issue.id}". Ids are identity; there is no rename operation.`,
-            );
-          }
-          validateIssue(issue, loadConfig(root));
-          return issue;
+          return parseEdit(session, fs.readFileSync(scratch, 'utf8'), original);
         } catch (err) {
           if (!(err instanceof DzError)) throw err;
           throw new DzError(
@@ -127,23 +112,17 @@ export function registerEdit(program: Command, ctx: CliContext): void {
         }
       };
 
-      /** Writes under the lock, or reports why not. Never partially applies. */
-      const commit = (issue: Issue): void => {
+      /** saveEdited, with failures pointed back at the scratch file. */
+      const save = (issue: Issue, base: string | null): SaveResult => {
         try {
-          // Re-validate under the lock. The check in readEdited ran against the
-          // config as it was when the editor opened, and a session can last
-          // hours — long enough for `component rm --force` to invalidate this
-          // issue. The write-side guard in writeIssue only checks that the
-          // bytes re-parse, not that the invariants hold.
-          validateIssue(issue, loadConfig(root));
-          writeIssue(root, issue);
+          return saveEdited(session, issue, base);
         } catch (err) {
-          // Only a DzError is a judgement about the user's edit. An ENOSPC or
-          // EACCES from the write is a fault in the machine, and relabelling it
-          // used to produce `error.code: "ENOSPC"` — exit 1, and a code that is
-          // not in the published schema's enum. Let those through as-is so the
-          // top level reports them as internal errors with exit 3.
-          if (!(err instanceof DzError)) throw err;
+          // A validation failure here is a judgement about the user's edit, so
+          // it must name the scratch file — their work is on disk and nothing
+          // else would tell them where. LOCKED is not about the edit and is
+          // rethrown untouched, or every contended save would claim the issue
+          // was invalid.
+          if (!(err instanceof DzError) || err.code === 'LOCKED') throw err;
           throw new DzError(
             err.code,
             `${err.message}. The issue was not changed; your edit is at ${scratch}`,
@@ -178,20 +157,9 @@ export function registerEdit(program: Command, ctx: CliContext): void {
           runEditor();
           const edited = readEdited();
 
-          // The conflicting bytes, set by the locked section below when the
-          // file on disk no longer matches what the edit was based on.
-          let conflict: string | null = null;
-          withProjectLock(ctx, root, 'edit', () => {
-            // Compare exact bytes: another writer may have changed the issue
-            // while the editor was open, and overwriting discards their work.
-            const current = fs.existsSync(target) ? fs.readFileSync(target, 'utf8') : null;
-            if (current === baseline) {
-              commit(edited);
-              return;
-            }
-            conflict = current;
-          });
-          if (conflict === null) return edited;
+          const first = save(edited, baseline);
+          if (first.saved) return first.issue;
+          let conflict: string | null = first.current;
 
           // Deliberately outside the lock: whatever happens next waits on a
           // human, and holding the lock across that blocks every other writer.
@@ -201,37 +169,29 @@ export function registerEdit(program: Command, ctx: CliContext): void {
 
             if (action === 'reload') {
               const kept = setAside('your-edit', fs.readFileSync(scratch, 'utf8'));
-              fs.writeFileSync(scratch, conflict as unknown as string, 'utf8');
-              baseline = conflict as unknown as string;
+              fs.writeFileSync(scratch, conflict ?? '', 'utf8');
+              baseline = conflict;
               ctx.stderr.write(`your version was kept at ${kept}\n`);
               break; // reopen the editor on the fresh content
             }
 
-            // Force. Reacquire and confirm the file is still the version the
-            // operator was told about; it can change again while they read the
-            // prompt. If it did, ask again rather than overwrite something
-            // nobody has seen.
-            let raced = false;
-            let wrote = false;
-            withProjectLock(ctx, root, 'edit', () => {
-              const current = fs.existsSync(target) ? fs.readFileSync(target, 'utf8') : null;
-              if (current !== conflict) {
-                conflict = current;
-                raced = true;
-                return;
-              }
-              // edit appends no log entry, so without this the overwritten
-              // version leaves no trace that it ever existed.
-              if (current !== null) {
+            // Force is the same compare-and-swap against the bytes the operator
+            // was actually shown. If the file moved on again, ask again rather
+            // than overwrite something nobody has seen.
+            const forced = save(edited, conflict);
+            if (forced.saved) {
+              // Announced only after the write succeeded. Saying "the version
+              // you overwrote" before knowing whether anything was overwritten
+              // is a lie on a double race, where the save is refused and the
+              // operator is re-prompted.
+              if (conflict !== null) {
                 ctx.stderr.write(
-                  `the version you overwrote was kept at ${setAside('overwritten', current)}\n`,
+                  `the version you overwrote was kept at ${setAside('overwritten', conflict)}\n`,
                 );
               }
-              commit(edited);
-              wrote = true;
-            });
-            if (wrote) return edited;
-            if (raced) continue; // re-ask against the newer conflict
+              return forced.issue;
+            }
+            conflict = forced.current;
           }
         }
       })();

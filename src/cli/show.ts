@@ -6,9 +6,9 @@
  */
 
 import type { Command } from 'commander';
+import { showIssue } from '../api/read.js';
 import { renderIssueDetail } from '../render/human.js';
 import { renderIssueJson } from '../render/json.js';
-import { findIssue } from '../store/issues.js';
 import { findProjectRoot } from '../store/root.js';
 import type { CliContext } from './context.js';
 
@@ -18,8 +18,7 @@ export function registerShow(program: Command, ctx: CliContext): void {
     .description('show one issue in full')
     .argument('<id-prefix>', 'any unambiguous leading substring of the id')
     .action((prefix: string) => {
-      const root = findProjectRoot(ctx.cwd);
-      const issue = findIssue(root, prefix);
+      const issue = showIssue({ root: findProjectRoot(ctx.cwd), env: ctx.env }, prefix);
       ctx.stdout.write(ctx.json ? renderIssueJson(issue) : renderIssueDetail(issue));
     });
 }

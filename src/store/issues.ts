@@ -30,18 +30,22 @@ export function listIssueIds(root: string): string[] {
     .sort();
 }
 
-export function readIssue(root: string, id: string): Issue {
+/** The file read plus the ENOENT → NOT_FOUND mapping; no parsing. */
+export function readIssueText(root: string, id: string): string {
   const file = issuePath(root, id);
-  const rel = path.relative(root, file);
-  let text: string;
   try {
-    text = fs.readFileSync(file, 'utf8');
+    return fs.readFileSync(file, 'utf8');
   } catch (err) {
     // Only a genuinely absent file is NOT_FOUND. EACCES or EISDIR mean the file
     // is there and something else is wrong; saying "no issue matches" would lie.
     if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
     throw new DzError('NOT_FOUND', `no issue file at ${file}`);
   }
+}
+
+/** Parses already-read issue text, enforcing that its id matches `id`. */
+export function parseIssueFile(root: string, id: string, text: string): Issue {
+  const rel = path.relative(root, issuePath(root, id));
   const issue = parseIssue(text, rel);
   // Spec §5: the frontmatter id must match the filename stem. Only this layer
   // knows the filename, and a mismatch makes the issue unaddressable — `list`
@@ -53,6 +57,10 @@ export function readIssue(root: string, id: string): Issue {
     );
   }
   return issue;
+}
+
+export function readIssue(root: string, id: string): Issue {
+  return parseIssueFile(root, id, readIssueText(root, id));
 }
 
 /**
@@ -139,14 +147,17 @@ function titleOf(root: string, id: string): string {
   }
 }
 
-export function findIssue(root: string, prefix: string): Issue {
-  // A filename is an id, so resolving a prefix is a directory listing, not a
-  // parse of every issue. Titles exist only for the ambiguity message, so they
-  // are read from the candidates alone, and only when there is more than one.
-  //
-  // Searching the stems rather than the successfully-parsed set is also what
-  // makes a corrupt or misnamed file reachable: it is found here, and readIssue
-  // below reports why it is bad instead of claiming nothing matched.
+/**
+ * A filename is an id, so resolving a prefix is a directory listing, not a
+ * parse of every issue. Titles exist only for the ambiguity message, so they
+ * are read from the candidates alone, and only when there is more than one.
+ *
+ * Searching the stems rather than the successfully-parsed set is also what
+ * makes a corrupt or misnamed file reachable: it is found here, and the
+ * caller's own read reports why it is bad instead of claiming nothing
+ * matched.
+ */
+export function resolveIssueId(root: string, prefix: string): string {
   const candidates = prefix === ''
     ? [] // resolvePrefix rejects an empty prefix; do not read anything for it.
     : listIssueIds(root).filter((id) => id.startsWith(prefix));
@@ -155,5 +166,9 @@ export function findIssue(root: string, prefix: string): Issue {
     ? candidates.map((id) => ({ id, title: titleOf(root, id) }))
     : candidates.map((id) => ({ id, title: '' }));
 
-  return readIssue(root, resolvePrefix(prefix, refs).id);
+  return resolvePrefix(prefix, refs).id;
+}
+
+export function findIssue(root: string, prefix: string): Issue {
+  return readIssue(root, resolveIssueId(root, prefix));
 }

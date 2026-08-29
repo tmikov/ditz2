@@ -6,14 +6,14 @@
  */
 
 import type { Command } from 'commander';
+import { diagnoseProject } from '../api/read.js';
+import { repairProject } from '../api/write.js';
+import type { Repair } from '../store/doctor.js';
 import { EXIT_USER_ERROR } from '../core/errors.js';
 import { renderDiagnoses, renderRepairs } from '../render/human.js';
 import { renderDiagnosesJson } from '../render/json.js';
-import { diagnose, repair } from '../store/doctor.js';
-import type { Repair } from '../store/doctor.js';
 import { findProjectRoot } from '../store/root.js';
 import type { CliContext } from './context.js';
-import { withProjectLock } from './lock.js';
 
 export function registerDoctor(program: Command, ctx: CliContext): void {
   program
@@ -21,16 +21,17 @@ export function registerDoctor(program: Command, ctx: CliContext): void {
     .description('check the project for common problems')
     .option('--fix', 'repair the problems dz can repair without changing content')
     .action((opts: { fix?: boolean }) => {
-      const root = findProjectRoot(ctx.cwd);
-      // Without --fix this command reads and nothing else, so it takes no lock:
-      // a diagnostic that refuses to run while another command holds the lock
-      // is useless precisely when you reach for it.
+      const session = { root: findProjectRoot(ctx.cwd), env: ctx.env };
+      // Without --fix this reads and nothing else, so it takes no lock: a
+      // diagnostic that refuses to run while another command holds the lock is
+      // useless precisely when you reach for it. The repair does take one, but
+      // inside the facade, which is where every other mutation takes its own.
       const fixed: Repair[] | undefined = opts.fix === true
-        ? withProjectLock(ctx, root, 'doctor --fix', () => repair(root))
+        ? repairProject(session)
         : undefined;
       // Diagnosed after repairing, so what it prints is the state you are left
       // with rather than the one you started from.
-      const problems = diagnose(root, ctx.env);
+      const problems = diagnoseProject(session);
       ctx.stdout.write(
         ctx.json
           ? renderDiagnosesJson(problems, fixed)

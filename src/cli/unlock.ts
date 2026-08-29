@@ -6,8 +6,9 @@
  */
 
 import type { Command } from 'commander';
+import { projectLockState } from '../api/read.js';
+import { breakProjectLock } from '../api/write.js';
 import { DzError } from '../core/errors.js';
-import { breakLock, lockState } from '../store/lock.js';
 import { findProjectRoot } from '../store/root.js';
 import type { CliContext } from './context.js';
 
@@ -18,7 +19,8 @@ export function registerUnlock(program: Command, ctx: CliContext): void {
     .option('--force', 'remove it even if it cannot be judged abandoned; this can delete a LIVE lock')
     .action((opts: { force?: boolean }) => {
       const root = findProjectRoot(ctx.cwd);
-      const state = lockState(root);
+      const session = { root, env: ctx.env };
+      const state = projectLockState(session);
       const force = opts.force === true;
 
       if (state.kind === 'none') {
@@ -47,7 +49,7 @@ export function registerUnlock(program: Command, ctx: CliContext): void {
       // that changed hands since lockState ran is not destroyed. That narrows
       // the window but cannot close it; see the note on breakLock itself.
       const before = state.kind === 'malformed' ? null : state.info.token;
-      if (!breakLock(root, before)) {
+      if (!breakProjectLock(session, before)) {
         throw new DzError(
           'LOCKED',
           'the lock changed hands while unlock was running; nothing was removed. Try again.',

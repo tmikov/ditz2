@@ -4,6 +4,14 @@
   "description": "A distributed issue tracker whose issues are plain files in your repository",
   "license": "MIT",
   "author": "Tzvetan Mikov",
+  "main": "./dist/api/index.js",
+  "types": "./dist/api/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/api/index.d.ts",
+      "default": "./dist/api/index.js"
+    }
+  },
   "type": "module",
   "bin": {
     "dz": "./dist/cli/main.js"

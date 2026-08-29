@@ -148,13 +148,16 @@ describe('dz edit', () => {
     });
   });
 
-  it('re-validates under the lock, catching config that changed mid-session', () => {
+  it('rejects an edit invalidated by a config change during the session', () => {
     project((dir, id) => {
       dz(['component', 'add', 'cli'], { cwd: dir });
       dz(['set', id, '--component', 'cli'], { cwd: dir });
 
       // The editor removes the component the issue uses, then makes an edit
-      // that was valid when the session started.
+      // that was valid when the session started. The config is loaded after
+      // $EDITOR exits, so this is caught before the lock is taken; the in-lock
+      // re-validation is covered by tests/cli/edit-scratch-path.test.ts, which
+      // is the only path that can reach it.
       const dzBin = path.resolve('dist/cli/main.js');
       const bin = path.join(dir, 'ed-rmcomp.sh');
       fs.writeFileSync(bin,

@@ -9,6 +9,16 @@ export type Status = 'open' | 'in-progress' | 'closed';
 export type Resolution = 'fixed' | 'wontfix' | 'duplicate';
 export type IssueType = 'bug' | 'feature' | 'task';
 
+/**
+ * The process environment, as the API reads it.
+ *
+ * Spelled structurally rather than as `NodeJS.ProcessEnv` so the published
+ * declarations do not require `@types/node`. It is the same shape, so
+ * `process.env` still assigns to it, and this package keeps its three runtime
+ * dependencies.
+ */
+export type Env = Record<string, string | undefined>;
+
 export const STATUSES: readonly Status[] = ['open', 'in-progress', 'closed'];
 export const RESOLUTIONS: readonly Resolution[] = ['fixed', 'wontfix', 'duplicate'];
 export const ISSUE_TYPES: readonly IssueType[] = ['bug', 'feature', 'task'];

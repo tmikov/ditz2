@@ -6,17 +6,11 @@
  */
 
 import type { Command } from 'commander';
-import { nowIso } from '../core/clock.js';
-import { addComment } from '../core/mutate.js';
-import { validateIssue } from '../core/validate.js';
+import { commentOn } from '../api/write.js';
 import { shortId } from '../render/human.js';
 import { renderIssueJson } from '../render/json.js';
-import { loadConfig } from '../store/config.js';
-import { resolveAuthor } from '../store/identity.js';
-import { findIssue, writeIssue } from '../store/issues.js';
 import { findProjectRoot } from '../store/root.js';
 import type { CliContext } from './context.js';
-import { withProjectLock } from './lock.js';
 import { readMessage } from './message.js';
 
 export function registerComment(program: Command, ctx: CliContext): void {
@@ -32,17 +26,9 @@ export function registerComment(program: Command, ctx: CliContext): void {
       // part of a message body is project state worth serializing.
       const text = readMessage(opts.message);
 
-      withProjectLock(ctx, root, 'comment', () => {
-        const author = resolveAuthor(root, ctx.env);
-        const issue = addComment(findIssue(root, prefix), text, author, nowIso());
-        // Appending a comment cannot itself break an invariant, but every other
-        // mutating command validates before writing and a uniform path is worth
-        // more than the skipped check saves.
-        validateIssue(issue, loadConfig(root));
-        writeIssue(root, issue);
-        ctx.stdout.write(
-          ctx.json ? renderIssueJson(issue) : `commented on ${shortId(issue.id)}\n`,
-        );
-      });
+      const issue = commentOn({ root, env: ctx.env }, prefix, text);
+      ctx.stdout.write(
+        ctx.json ? renderIssueJson(issue) : `commented on ${shortId(issue.id)}\n`,
+      );
     });
 }

@@ -6,20 +6,12 @@
  */
 
 import type { Command } from 'commander';
-import { nowIso } from '../core/clock.js';
-import { newId } from '../core/id.js';
-import { createIssue } from '../core/mutate.js';
+import { addIssue } from '../api/write.js';
 import { ISSUE_TYPES } from '../core/types.js';
-import type { IssueType } from '../core/types.js';
-import { validateEnum, validateIssue } from '../core/validate.js';
-import { renderIssueJson } from '../render/json.js';
 import { shortId } from '../render/human.js';
-import { loadConfig } from '../store/config.js';
-import { resolveAuthor } from '../store/identity.js';
-import { writeIssue } from '../store/issues.js';
+import { renderIssueJson } from '../render/json.js';
 import { findProjectRoot } from '../store/root.js';
 import type { CliContext } from './context.js';
-import { withProjectLock } from './lock.js';
 import { readMessage } from './message.js';
 
 interface AddOptions {
@@ -43,27 +35,14 @@ export function registerAdd(program: Command, ctx: CliContext): void {
       // part of a message body is project state worth serializing.
       const body = readMessage(opts.message);
 
-      withProjectLock(ctx, root, 'add', () => {
-        const config = loadConfig(root);
-        const author = resolveAuthor(root, ctx.env);
-
-        const issue = createIssue(
-          {
-            id: newId(),
-            title,
-            type: validateEnum<IssueType>(opts.type, ISSUE_TYPES, 'type'),
-            component: opts.component ?? null,
-            body,
-          },
-          author,
-          nowIso(),
-        );
-        validateIssue(issue, config);
-        writeIssue(root, issue);
-
-        ctx.stdout.write(
-          ctx.json ? renderIssueJson(issue) : `created ${shortId(issue.id)}  ${issue.title}\n`,
-        );
+      const issue = addIssue({ root, env: ctx.env }, {
+        title,
+        type: opts.type,
+        component: opts.component ?? null,
+        body,
       });
+      ctx.stdout.write(
+        ctx.json ? renderIssueJson(issue) : `created ${shortId(issue.id)}  ${issue.title}\n`,
+      );
     });
 }

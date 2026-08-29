@@ -5,9 +5,11 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+import type { Env } from '../core/types.js';
+
 export interface CliContext {
   cwd: string;
-  env: NodeJS.ProcessEnv;
+  env: Env;
   stdout: NodeJS.WritableStream;
   stderr: NodeJS.WritableStream;
   json: boolean;

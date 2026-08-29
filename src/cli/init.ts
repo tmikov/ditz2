@@ -7,12 +7,12 @@
 
 import path from 'node:path';
 import type { Command } from 'commander';
+import { withLock } from '../api/session.js';
 import { DzError } from '../core/errors.js';
 import { initProject, loadConfig, loadLocalAuthor, saveLocalAuthor } from '../store/config.js';
 import { authorProblem, probeVcsIdentity } from '../store/identity.js';
 import { findProjectRoot } from '../store/root.js';
 import type { CliContext } from './context.js';
-import { withProjectLock } from './lock.js';
 
 /** The enclosing project root, or null if this directory is not inside one. */
 function enclosingProject(cwd: string): string | null {
@@ -68,59 +68,66 @@ export function registerInit(program: Command, ctx: CliContext): void {
       // block every other writer for that whole time.
       const probed = loadLocalAuthor(root) === null ? probeVcsIdentity(ctx.cwd) : null;
 
-      withProjectLock(ctx, root, 'init', () => {
-        // initProject leaves an existing config.yaml alone, so on a re-init
-        // the requested name is not the one in effect. Report what is
-        // actually configured rather than what was asked for.
-        const effectiveName = loadConfig(root).name;
+      // Nothing that waits on a pipe may run under the lock, so the closure
+      // only computes; the writing happens after it has been released.
+      const { effectiveName, identity, problem } = withLock(
+        { root, env: ctx.env },
+        'init',
+        () => {
+          // initProject leaves an existing config.yaml alone, so on a re-init
+          // the requested name is not the one in effect. Report what is
+          // actually configured rather than what was asked for.
+          const configuredName = loadConfig(root).name;
 
-        // Re-read under the lock, because the check that decided whether to
-        // probe ran outside it. Never overwrite an identity the user already
-        // set: a re-init used to replace a hand-edited author with the VCS one.
-        const existing = loadLocalAuthor(root);
-        let identity: string | null = existing;
-        let problem: string | null = null;
-        if (existing === null) {
+          // Re-read under the lock, because the check that decided whether to
+          // probe ran outside it. Never overwrite an identity the user already
+          // set: a re-init used to replace a hand-edited author with the VCS one.
+          const existing = loadLocalAuthor(root);
+          if (existing !== null) {
+            return { effectiveName: configuredName, identity: existing, problem: null };
+          }
+
           // Checked here rather than stored blindly: an unusable identity
           // would otherwise init cleanly and then fail every command that
           // needs an author, a long way from the thing that caused it.
-          problem = probed === null ? null : authorProblem(probed);
-          identity = problem === null ? probed : null;
-          if (identity !== null) saveLocalAuthor(root, identity);
-        }
+          const rejected = probed === null ? null : authorProblem(probed);
+          const accepted = rejected === null ? probed : null;
+          if (accepted !== null) saveLocalAuthor(root, accepted);
+          return { effectiveName: configuredName, identity: accepted, problem: rejected };
+        },
+      );
 
-        if (ctx.json) {
-          ctx.stdout.write(
-            `${JSON.stringify({
-              name: effectiveName,
-              requestedName: name,
-              root,
-              author: identity,
-              authorRejected: problem === null ? null : probed,
-            }, null, 2)}\n`,
-          );
-          return;
-        }
+      if (ctx.json) {
         ctx.stdout.write(
-          `initialized dz project "${effectiveName}" in ${path.join(root, 'dz')}\n`,
+          `${JSON.stringify({
+            name: effectiveName,
+            requestedName: name,
+            root,
+            author: identity,
+            authorRejected: problem === null ? null : probed,
+          }, null, 2)}\n`,
         );
-        if (effectiveName !== name) {
-          ctx.stdout.write(
-            `note: the project was already named "${effectiveName}"; "${name}" was not applied. Edit name in dz/config.yaml to change it.\n`,
-          );
-        }
-        if (identity !== null) {
-          ctx.stdout.write(`author identity: ${identity}\n`);
-        } else if (problem !== null) {
-          ctx.stdout.write(
-            `your VCS identity ${JSON.stringify(probed)} ${problem}, so it was not saved;\n` +
-              'set DZ_AUTHOR or add an author to dz/config.local.yaml\n',
-          );
-        } else {
-          ctx.stdout.write(
-            'could not probe a VCS identity; set DZ_AUTHOR or edit dz/config.local.yaml\n',
-          );
-        }
-      });
+        return;
+      }
+      ctx.stdout.write(
+        `initialized dz project "${effectiveName}" in ${path.join(root, 'dz')}\n`,
+      );
+      if (effectiveName !== name) {
+        ctx.stdout.write(
+          `note: the project was already named "${effectiveName}"; "${name}" was not applied. Edit name in dz/config.yaml to change it.\n`,
+        );
+      }
+      if (identity !== null) {
+        ctx.stdout.write(`author identity: ${identity}\n`);
+      } else if (problem !== null) {
+        ctx.stdout.write(
+          `your VCS identity ${JSON.stringify(probed)} ${problem}, so it was not saved;\n` +
+            'set DZ_AUTHOR or add an author to dz/config.local.yaml\n',
+        );
+      } else {
+        ctx.stdout.write(
+          'could not probe a VCS identity; set DZ_AUTHOR or edit dz/config.local.yaml\n',
+        );
+      }
     });
 }

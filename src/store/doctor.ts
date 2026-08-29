@@ -8,7 +8,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import YAML from 'yaml';
-import type { Config, Issue } from '../core/types.js';
+import type { Config, Env, Issue } from '../core/types.js';
 import { parseIssue } from '../core/serialize.js';
 import { validateIssue } from '../core/validate.js';
 import { IGNORE_LINES, loadConfig } from './config.js';
@@ -162,7 +162,7 @@ function checkInvariants(root: string, issues: Issue[]): Diagnosis[] {
   return found;
 }
 
-function checkAuthor(root: string, env: NodeJS.ProcessEnv): Diagnosis[] {
+function checkAuthor(root: string, env: Env): Diagnosis[] {
   try {
     resolveAuthor(root, env);
     return [];
@@ -343,7 +343,7 @@ function checkStrayFiles(root: string): Diagnosis[] {
 }
 
 /** Every check, in the order a reader should act on them. */
-export function diagnose(root: string, env: NodeJS.ProcessEnv): Diagnosis[] {
+export function diagnose(root: string, env: Env): Diagnosis[] {
   const { issues, failures } = loadAllIssues(root);
 
   // A diagnostic must not fall over on the conditions it exists to report.

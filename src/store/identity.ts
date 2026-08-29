@@ -7,6 +7,7 @@
 
 import { execFileSync } from 'node:child_process';
 import { DzError } from '../core/errors.js';
+import type { Env } from '../core/types.js';
 import { loadLocalAuthor } from './config.js';
 import { localConfigPath } from './root.js';
 
@@ -70,7 +71,7 @@ function checkAuthor(author: string, source: string): string {
   return author;
 }
 
-export function resolveAuthor(root: string, env: NodeJS.ProcessEnv): string {
+export function resolveAuthor(root: string, env: Env): string {
   const fromEnv = env['DZ_AUTHOR'];
   if (typeof fromEnv === 'string' && fromEnv.trim() !== '') {
     return checkAuthor(fromEnv, 'DZ_AUTHOR');
