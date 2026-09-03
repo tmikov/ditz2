@@ -18,6 +18,14 @@ const HELP: readonly (readonly [string, string])[] = [
   ['q', 'quit'],
   ['enter', 'open the selected issue full-screen'],
   ['enter / esc / q, in the issue view', 'back to the list — q does not quit'],
+  ['c', 'comment on the selected issue'],
+  ['x', 'close it — pick a resolution, comment optional'],
+  ['tab', 'edit the selected issue in a form'],
+  ['n', 'a new issue, in the same form'],
+  ['', ''],
+  ['while a write waits', 'r retry, esc give up'],
+  ['in the form', 'tab/shift-tab moves between the fields'],
+  ['', 'up/down picks, ^S saves, esc cancels'],
   ['', ''],
   ['in the filter field', 'bare words are a regex over titles, bodies and log'],
   ['status:open', 'also in-progress, closed'],
@@ -39,9 +47,9 @@ export function maxHelpOffset(rows: number): number {
  * Takes a row budget, stays inside it, and scrolls.
  *
  * No border, and it replaces the list and the detail pane together rather than
- * just the pane: the bindings are 14 lines and a short terminal's detail pane
- * is far fewer, so an overlay sized to the pane would push the header and
- * footer off the screen.
+ * just the pane: the bindings run to well over a dozen lines and a short
+ * terminal's detail pane is far fewer, so an overlay sized to the pane would
+ * push the header and footer off the screen.
  *
  * Scrolling rather than only marking the overflow. A "… 5 more" that nothing
  * can reveal tells the operator that five bindings exist and refuses to name
@@ -50,7 +58,12 @@ export function maxHelpOffset(rows: number): number {
 export function HelpOverlay(
   { rows, offset, width }: { rows: number; offset: number; width: number },
 ): React.ReactElement {
-  const all = HELP.map(([key, what]) => (key === '' ? '' : `  ${key.padEnd(22)}${what}`));
+  // A spacer is a row with nothing in *either* column. Testing the key alone
+  // silently swallowed the description of a continuation row — a second line
+  // hanging under the key above it, which is how the form's two-line entry is
+  // written — and printed a blank line where the text should have been.
+  const all = HELP.map(([key, what]) =>
+    (key === '' && what === '' ? '' : `  ${key.padEnd(22)}${what}`));
 
   if (all.length <= rows) {
     return (

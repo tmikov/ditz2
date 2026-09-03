@@ -279,9 +279,17 @@ rejects every value until you run `dz component add <name>`.
 
 ### A terminal UI
 
-`dz ui` opens a full-screen browser for the backlog. It lives in a separate
-package so that the CLI keeps its three dependencies — Ink and React are 38
-packages and about 23 MB.
+`dz ui` opens a full-screen view of the backlog: browse and filter it, and write
+to it — comment, close, edit an issue's fields, create one. The keys are listed
+in [ui/README.md](ui/README.md#keys) rather than here: this file is outside that
+package, and an enumeration a plan has no reason to look at is one that goes
+stale. It lives in a separate package so that the CLI keeps its three
+dependencies — Ink and React are 38 packages and about 23 MB.
+
+Its writes go through the same public API as the CLI's, so they take the same
+lock and get the same validation. It passes `lockTimeoutMs: 0` for the reason
+described below, and shows contention as a screen you can retry from rather than
+as a two-second freeze.
 
 Neither package is published yet; see [ui/README.md](ui/README.md) for how to
 build and run it from a clone.

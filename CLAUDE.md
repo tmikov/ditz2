@@ -61,9 +61,9 @@ largest source of wasted confidence here:
   which cannot pass by luck.
 - A test named `re-validates under the lock` passed with that validation
   deleted outright.
-- The acceptance gate `sl status tests/` was run against the working tree,
+- The acceptance gate `git status tests/` was run against the working tree,
   where it is empty because everything is committed. The check that meant
-  something was `sl status --rev <base> --rev . tests/`.
+  something was `git diff --name-only <base>..HEAD -- tests/`.
 - A packed-tarball check confirmed runtime imports resolved and private paths
   were blocked — and passed while the `.d.ts` files it existed to verify did
   not exist at all.
@@ -78,8 +78,9 @@ because it buys confidence it has not earned.
 Two separate bugs shipped behind a green suite because the test environment
 differed from the deployment one:
 
-- Lock acquisition used `link(2)`. EdenFS, the virtual filesystem some large
-  monorepos are served from, rejects it with `EPERM`. Every mutating command
+- Lock acquisition used `link(2)`. Some virtual filesystems — the FUSE-backed
+  checkouts large repositories are sometimes served from — reject it with
+  `EPERM`. Every mutating command
   failed in this very repository while 291 tests passed, because they build
   their projects under `os.tmpdir()`.
 - `uuid@11` reads a global `crypto`. vitest polyfills it; the built binary has

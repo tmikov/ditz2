@@ -7,7 +7,7 @@
 
 import type { Command } from 'commander';
 import { addIssue } from '../api/write.js';
-import { ISSUE_TYPES } from '../core/types.js';
+import { DEFAULT_ISSUE_TYPE, ISSUE_TYPES } from '../core/types.js';
 import { shortId } from '../render/human.js';
 import { renderIssueJson } from '../render/json.js';
 import { findProjectRoot } from '../store/root.js';
@@ -25,7 +25,7 @@ export function registerAdd(program: Command, ctx: CliContext): void {
     .command('add')
     .description('create a new issue')
     .argument('<title>', 'issue title')
-    .option('--type <type>', `one of ${ISSUE_TYPES.join('|')}`, 'task')
+    .option('--type <type>', `one of ${ISSUE_TYPES.join('|')}`, DEFAULT_ISSUE_TYPE)
     .option('--component <component>', 'a component from dz/config.yaml')
     .option('-m, --message <text>', "body text, or '-' to read stdin")
     .action((title: string, opts: AddOptions) => {

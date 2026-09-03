@@ -12,6 +12,16 @@ const TYPE_WIDTH = 7;
 const COMPONENT_WIDTH = 9;
 
 /**
+ * How this UI spells an issue nobody owns.
+ *
+ * Exported for the same reason `NO_COMPONENT` is: the detail line and the
+ * form's assignee row have to agree, and two literals would be free to drift.
+ * Cosmetic drift rather than the `dz doctor` kind — nothing decides anything
+ * on this string — but one word in two voices is still one word too many.
+ */
+export const UNASSIGNED = 'unassigned';
+
+/**
  * Exactly `width` characters, truncating as well as padding. Component names
  * are arbitrary user strings — `dz component add documentation` is legal — and
  * a value that overruns its column shifts every column after it on that row
@@ -158,7 +168,7 @@ function issueHead(issue: Issue): string[] {
   return [
     issue.title,
     `${issue.status}${resolution} · ${issue.component ?? 'no component'} · `
-    + `${issue.assignee ?? 'unassigned'} · ${issue.type}`,
+    + `${issue.assignee ?? UNASSIGNED} · ${issue.type}`,
     '',
   ];
 }

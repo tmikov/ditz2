@@ -30,7 +30,9 @@ export type { LockInfo, LockState } from '../store/lock.js';
 export type {
   Config, Env, Issue, IssueType, LogEntry, Resolution, Status,
 } from '../core/types.js';
-export { ISSUE_TYPES, RESOLUTIONS, STATUSES } from '../core/types.js';
+export { DEFAULT_ISSUE_TYPE, ISSUE_TYPES, RESOLUTIONS, STATUSES } from '../core/types.js';
+export { SETTABLE_STATUSES } from '../core/validate.js';
+export type { SettableStatus } from '../core/validate.js';
 export { DzError } from '../core/errors.js';
 export type { DzErrorCode } from '../core/errors.js';
 export { SCHEMA_VERSION, JSON_SCHEMA } from '../render/schema.js';

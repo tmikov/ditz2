@@ -68,9 +68,10 @@ const TUTORIAL = `dz tutorial — one session, in order.
       Prints the JSON Schema for every --json payload.
 
   dz ui
-      Opens a full-screen terminal UI for browsing the backlog, if the separate
-      ditz2-ui package is installed. It needs a terminal, and everything it can
-      do the commands above can already do.
+      Opens a full-screen terminal UI over the backlog — browse it, comment,
+      close, edit an issue's fields, create one — if the separate ditz2-ui
+      package is installed. It needs a terminal, and everything it can do the
+      commands above can already do.
 
 Then commit dz/ along with your code. Every command also accepts --json.
 Run 'dz help agents' for the machine-readable contract.

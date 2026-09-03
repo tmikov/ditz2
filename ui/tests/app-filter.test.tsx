@@ -11,7 +11,7 @@ import React from 'react';
 import { App } from '../src/app.js';
 import { initialState, SNAPSHOT_FILTER } from '../src/state.js';
 import type { Filter, Project } from 'ditz2';
-import { KEY, lines, press } from './helpers.js';
+import { footerOf, KEY, lines, press } from './helpers.js';
 import { issue, three } from './fixtures.js';
 
 function stub(list: Project['list']): Project {
@@ -197,30 +197,57 @@ describe('? help', () => {
     }
   });
 
+  it('describes the form, including the line that hangs under the key', async () => {
+    // The second line of the form's entry has no key of its own — it is a
+    // continuation, indented under `in the form`. HelpOverlay used to treat
+    // any row with an empty key as a spacer and drop its text, so this row
+    // rendered as a blank line and the operator was never told what ^S does.
+    // Nothing else in HELP is written that way, which is why nothing caught
+    // it.
+    const { lastFrame, stdin } = mount(undefined, 30);
+    await press(stdin, '?');
+    const frame = lastFrame() ?? '';
+    expect(frame).toContain('edit the selected issue in a form');
+    expect(frame).toContain('tab/shift-tab moves between the fields');
+    expect(frame).toContain('up/down picks, ^S saves, esc cancels');
+    // `n` is bound now, and `?` owes it the same row the footer owes it. This
+    // was `not.toContain` while the key was dead — the same flip, one screen
+    // over, and the same reason it had to be written negative first.
+    expect(frame).toContain('a new issue, in the same form');
+  });
+
   it('stays inside a short terminal instead of scrolling the chrome away', async () => {
-    // The bindings are 14 lines. A 12-row terminal cannot show them, and an
-    // overlay that overflows pushes the header and footer off the screen —
-    // which loses the operator more than a scrollable help does.
+    // The bindings run to well over a dozen lines. A 12-row terminal cannot
+    // show them, and an overlay that overflows pushes the header and footer
+    // off the screen — which loses the operator more than a scrollable help
+    // does.
     const { lastFrame, stdin } = mount(undefined, 12);
     await press(stdin, '?');
     const frame = lines(lastFrame());
     expect(frame.length).toBeLessThanOrEqual(12);
     expect(frame.join('\n')).toContain('more');
-    expect(frame.at(-1)).toContain('q quit');
+    expect(footerOf(lastFrame())).toContain('q quit');
   });
 
   it('reaches the bindings it had no room for', async () => {
     // A "… 5 more" that nothing can reveal names a number and withholds the
     // answer. Scrolling is what makes the truncation acceptable.
     //
-    // Nine downs, not seven: Task 12 added two lines to HELP (enter, and the
-    // issue view's esc/q), which pushed maxHelpOffset at rows=12 from 7 to 9.
+    // Eighteen downs. The help overlay's budget is
+    // `rows - CHROME_ROWS - DETAIL_BORDER_ROWS` = 7 at this terminal, so
+    // `maxHelpOffset(7)` is `HELP_LINES - 6`; the row the `n` task adds took
+    // HELP_LINES to 24, so the clamp moved from 17 to 18. Before that, plan
+    // 2c's form task had moved it from 14 to 17, the footer's second line from
+    // 13 to 14, plan 2b's close task from 9 to 13, and Task 12's two lines
+    // from 7 to 9. Seventeen downs now stops one row short of `all:true`,
+    // which is what makes the count a fixture rather than a decoration.
     const { lastFrame, stdin } = mount(undefined, 12);
     await press(stdin, '?');
     expect(lastFrame()).not.toContain('all:true');
     await press(
       stdin,
-      KEY.down, KEY.down, KEY.down, KEY.down, KEY.down,
+      KEY.down, KEY.down, KEY.down, KEY.down, KEY.down, KEY.down, KEY.down,
+      KEY.down, KEY.down, KEY.down, KEY.down, KEY.down, KEY.down, KEY.down,
       KEY.down, KEY.down, KEY.down, KEY.down,
     );
     expect(lastFrame()).toContain('all:true');
@@ -231,12 +258,14 @@ describe('? help', () => {
     // binding — a footer that lists a key doing nothing is a lie this plan
     // will not tolerate for the footer, and help owes the same promise.
     //
-    // Two Ctrl-Ds, not one: a single page (8 rows at this terminal height) no
-    // longer clears the two lines Task 12 added to HELP.
+    // Three Ctrl-Ds, not two: a page is 7 rows at this terminal height, and
+    // the clamp is maxHelpOffset(7) = 18 now that the `n` row has taken
+    // HELP_LINES to 24, which two pages of 7 do not reach. The third page
+    // overshoots to 21 and clamps back to 18.
     const { lastFrame, stdin } = mount(undefined, 12);
     await press(stdin, '?');
     expect(lastFrame()).not.toContain('all:true');
-    await press(stdin, KEY.ctrlD, KEY.ctrlD);
+    await press(stdin, KEY.ctrlD, KEY.ctrlD, KEY.ctrlD);
     expect(lastFrame()).toContain('all:true');
     await press(stdin, KEY.ctrlU);
     expect(lastFrame()).not.toContain('all:true');

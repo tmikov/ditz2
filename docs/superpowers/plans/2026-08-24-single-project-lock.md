@@ -27,11 +27,7 @@
 
 This is a an internal development host. Before running `node`, `npm`, or `npx`:
 
-```bash
-source the local bootstrap script   # Node 21.4.0 + a reachable npm registry
-```
-
-`node --version` must print `v21.4.0`; the system default is Node 16 and will not work. Do **not** run recursive `find`/`grep`/`rg` from the a large monorepo root — it will hang. the local VCS: every `sl` command needs `--reason "<intent> - sl help <cmd>"`, and run `the formatter` before committing.
+`node --version` must print at least `v20`; anything older will not work.
 
 Baseline before Task 1: **241 tests passing, 0 skipped.** Every task must leave the suite green with no skips.
 
@@ -276,7 +272,6 @@ describe('lockState', () => {
 - [ ] **Step 3: Run tests to verify they fail**
 
 ```bash
-source the local bootstrap script
 npx vitest run src/store/lock.test.ts
 ```
 
@@ -491,9 +486,8 @@ Expected: 241 + 18 = 259 passing, 0 skipped; typecheck clean.
 
 ```bash
 the formatter
-sl add src/store/lock.ts src/store/lock.test.ts \
-  --reason "add ditz2 project lock primitive - sl help add"
-sl commit --reason "commit ditz2 lock primitive - sl help commit" \
+git add src/store/lock.ts src/store/lock.test.ts
+git commit \
   -m "ditz2: project lock primitive"
 ```
 
@@ -733,9 +727,8 @@ Expected: 259 + 9 = 268 passing, 0 skipped.
 
 ```bash
 the formatter
-sl add src/cli/lock.ts tests/cli/lock.test.ts \
-  --reason "add ditz2 cli lock wrapper - sl help add"
-sl commit --reason "commit ditz2 command locking - sl help commit" \
+git add src/cli/lock.ts tests/cli/lock.test.ts
+git commit \
   -m "ditz2: serialize mutating commands behind the project lock"
 ```
 
@@ -1034,9 +1027,8 @@ Expected: 268 + 12 = 280 passing, 0 skipped.
 
 ```bash
 the formatter
-sl add src/cli/unlock.ts tests/cli/unlock.test.ts \
-  --reason "add ditz2 unlock command - sl help add"
-sl commit --reason "commit ditz2 unlock and doctor lock checks - sl help commit" \
+git add src/cli/unlock.ts tests/cli/unlock.test.ts
+git commit \
   -m "ditz2: dz unlock, and doctor checks for abandoned locks"
 ```
 
@@ -1057,7 +1049,7 @@ This is the task the whole design exists for. `edit` must **never** hold the loc
 Three things change from today's behavior, and all three are improvements to preserve:
 
 1. `$EDITOR` opens a **scratch copy**, not the real file. The real file is only written if the edit parses and validates, so a broken edit can no longer leave a broken file on disk.
-2. The edit is committed by parsing the scratch and calling `writeIssue`, **not** by renaming the scratch. `rename` fails with `EXDEV` across filesystems, and the scratch lives in `os.tmpdir()`, which is a different filesystem from an EdenFS checkout. Going through `writeIssue` also gives `edit` the same validation and re-parse guard as every other write.
+2. The edit is committed by parsing the scratch and calling `writeIssue`, **not** by renaming the scratch. `rename` fails with `EXDEV` across filesystems, and the scratch lives in `os.tmpdir()`, which is a different filesystem from a FUSE-backed checkout. Going through `writeIssue` also gives `edit` the same validation and re-parse guard as every other write.
 3. The parsed id must equal the original. `writeIssue` targets
    `issuePath(root, issue.id)`, so an edited `id:` writes elsewhere — leaving
    the original untouched, creating a second issue, and overwriting any issue
@@ -1384,7 +1376,7 @@ Expected: ~280 passing after the edit tests are replaced, 0 skipped.
 
 ```bash
 the formatter
-sl commit --reason "commit ditz2 edit scratch protocol - sl help commit" \
+git commit \
   -m "ditz2: edit via a scratch copy, holding no lock while the editor runs"
 ```
 
@@ -1459,7 +1451,7 @@ a half-written file, because every write is a temp file plus a rename.
 ```bash
 npm test && npm run typecheck && the linter
 the formatter
-sl commit --reason "commit ditz2 lock documentation - sl help commit" \
+git commit \
   -m "ditz2: document the project lock"
 ```
 
@@ -1500,7 +1492,8 @@ until it was, `doctor` certified the gap as healthy because it carried its own
 stale copy of the ignore list.
 
 **2. Task 2's `link(2)` acquisition does not work where this tool is
-developed.** EdenFS, the virtual filesystem backing a large monorepo, rejects `link(2)`
+developed.** a FUSE-backed virtual filesystem, of the kind large repositories are
+sometimes served from, rejects `link(2)`
 with `EPERM`. Every mutating command failed in ditz2's own repository while all
 291 tests passed, because `withTempProject` builds under `os.tmpdir()`.
 Acquisition now uses `O_EXCL`, as the original design specified, and

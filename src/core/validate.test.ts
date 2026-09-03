@@ -6,8 +6,11 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { validateIssue, assertSettableStatus, validateComponent } from './validate.js';
+import {
+  validateIssue, assertSettableStatus, validateComponent, SETTABLE_STATUSES,
+} from './validate.js';
 import { DzError } from './errors.js';
+import { STATUSES } from './types.js';
 import type { Config, Issue } from './types.js';
 
 const CONFIG: Config = { name: 'ditz2', components: ['core', 'cli', 'docs'] };
@@ -85,5 +88,30 @@ describe('assertSettableStatus', () => {
 describe('validateComponent', () => {
   it('rejects an unconfigured component', () => {
     expect(() => validateComponent('nope', CONFIG)).toThrow(/INVALID|not a configured/);
+  });
+});
+
+describe('SETTABLE_STATUSES', () => {
+  it('is exactly the statuses assertSettableStatus accepts', () => {
+    // Pinned from both sides on purpose. Asserting only that `closed` is
+    // absent would pass for an empty list, and asserting only that each
+    // member is accepted would pass for a list that had quietly lost
+    // `in-progress` — which is the failure a UI picker would show as a
+    // missing option nobody could choose.
+    //
+    // No separate "every element is a real status" test exists: given
+    // assertSettableStatus's own vocabulary check against STATUSES, any
+    // element here that was not a real status would already fail the first
+    // loop above (it would throw), so that assertion would never fail on its
+    // own — it would only ever restate this one. See the comment on
+    // SETTABLE_STATUSES in validate.ts for why that property is enforced by
+    // review instead.
+    expect(SETTABLE_STATUSES.length).toBeGreaterThan(0);
+    for (const status of SETTABLE_STATUSES) {
+      expect(() => { assertSettableStatus(status); }).not.toThrow();
+    }
+    for (const status of STATUSES.filter((s) => !SETTABLE_STATUSES.includes(s as never))) {
+      expect(() => { assertSettableStatus(status); }).toThrow(DzError);
+    }
   });
 });

@@ -14,10 +14,10 @@ import { dz } from '../helpers.js';
 /**
  * Every other integration test builds its project under os.tmpdir(), so the
  * whole suite only ever exercises whatever filesystem backs /tmp. That hid a
- * total failure: the lock was once acquired with link(2), and EdenFS -- the
- * virtual filesystem some large monorepos are served from -- rejects link(2)
- * with EPERM. Every mutating command failed in the repository itself
- * while all 291 tests passed.
+ * total failure: the lock was once acquired with link(2), and some virtual
+ * filesystems -- the FUSE-backed checkouts large repositories are sometimes
+ * served from -- reject link(2) with EPERM. Every mutating command failed in
+ * the repository itself while all 291 tests passed.
  *
  * These run against the checkout's own filesystem, whatever that is on the
  * machine running them. On a normal clone that is the same filesystem as /tmp

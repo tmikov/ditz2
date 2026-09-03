@@ -42,10 +42,7 @@ Copied from `docs/superpowers/specs/2026-08-25-ditz2-tui-design.md` and
   so that it is already right when plan 2b adds mutations.
 - **Selection is tracked by issue id, never by list index.**
 - **No filesystem watching.** The snapshot refreshes at startup and on `r`.
-- **Node toolchain:** run `source the local bootstrap script` before any `node`, `npm`
-  or `npx`. System Node is v16; the script puts Node 21 ahead of it.
-- **Source control is the local VCS, never git.** Pass `--reason "<intent> - sl help
-  <cmd>"` to every `sl` invocation.
+- **Node toolchain:** any Node >= 20 and the public npm registry.
 - **Commit messages are `ditz2: <what changed>`**, or `ditz2-ui:` for a change
   under `ui/`. Every commit in this repository's history uses the package-name
   prefix; conventional-commits `feat(...)` would be a new style introduced by
@@ -248,7 +245,6 @@ describe('the surface a UI reads', () => {
 - [ ] **Step 2: Run the tests and watch them fail**
 
 ```bash
-source the local bootstrap script
 npx vitest run src/api
 ```
 
@@ -377,8 +373,7 @@ Three deliberate breakages, one at a time, each reverted immediately:
 npm run typecheck && npm run build && npx vitest run
 rm -rf .dz-fstest
 the formatter and linter
-sl commit src/api tests -m "ditz2: expose the read surface a UI needs from the public API" \
-  --reason "commit facade widening for the TUI - sl help commit"
+git commit src/api tests -m "ditz2: expose the read surface a UI needs from the public API"
 ```
 
 All 366 pre-existing tests must still pass untouched. If any needed editing, the
@@ -441,8 +436,8 @@ reads `ui/tests/`, and it runs nowhere else.
 
 **It invokes `tsc` and `vitest` directly rather than delegating to the
 workspace's own scripts, and that is not a style preference.** The npm on this
-machine is 8.19.4 — `.tooling/bin/npm` shims the vendored Node 21 onto the
-*system* npm rather than the 11.x bundled beside it — and npm 8 **silently
+machine is 8.19.4 — a shim points a vendored Node at the *system* npm rather
+than the 11.x bundled beside it — and npm 8 **silently
 discards the exit code of any script run in a workspace member**, whether
 invoked as `npm run x --workspace y` or from inside the member directory.
 Verified in an isolated project: a member script exiting 7 reports 0 three
@@ -616,7 +611,6 @@ export async function runUi(_opts: RunUiOptions): Promise<number> {
 - [ ] **Step 6: Install, and write the boundary test**
 
 ```bash
-source the local bootstrap script
 npm install
 ```
 
@@ -719,7 +713,7 @@ excludes the tests and vitest does not typecheck, so without that step a type
 error in a UI test is invisible.
 
 Both run `tsc` and `vitest` directly instead of calling `ui/`'s own npm
-scripts. npm 8.19.4 — which `.tooling/bin/npm` resolves to — throws away the
+scripts. npm 8.19.4 — which this machine's `npm` resolves to — throws away the
 exit code of any script run in a workspace member, so
 `npm run test --workspace ditz2-ui` prints its failures and exits 0. If you run
 the scripts inside `ui/` by hand, **read the output rather than trusting `$?`**
@@ -730,10 +724,9 @@ until the toolchain moves to the npm 11 bundled with the vendored Node.
 
 ```bash
 the formatter and linter
-sl add ui package-lock.json
-sl commit ui package.json package-lock.json CLAUDE.md \
-  -m "ditz2: add the ditz2-ui workspace and a package-boundary test" \
-  --reason "commit the new ui workspace skeleton - sl help commit"
+git add ui package-lock.json
+git commit ui package.json package-lock.json CLAUDE.md \
+  -m "ditz2: add the ditz2-ui workspace and a package-boundary test"
 ```
 
 `package-lock.json` will have grown by roughly 39 packages. That is expected and
@@ -863,7 +856,6 @@ describe('dz ui handover', () => {
 - [ ] **Step 2: Run them and watch them fail**
 
 ```bash
-source the local bootstrap script
 npx vitest run src/cli
 ```
 
@@ -1087,9 +1079,8 @@ Expected: PASS. `help.test.ts`'s drift guard now covers `ui` too.
 
 ```bash
 the formatter and linter
-sl add src/cli/ui.ts src/cli/ui.test.ts tests/cli/ui.test.ts
-sl commit src tests -m "ditz2: add dz ui, handing over to the ditz2-ui package" \
-  --reason "commit the dz ui handover command - sl help commit"
+git add src/cli/ui.ts src/cli/ui.test.ts tests/cli/ui.test.ts
+git commit src tests -m "ditz2: add dz ui, handing over to the ditz2-ui package"
 ```
 
 ---
@@ -1217,7 +1208,6 @@ describe('parseQuery', () => {
 - [ ] **Step 2: Run and watch it fail**
 
 ```bash
-source the local bootstrap script
 npm run test --workspace ditz2-ui
 ```
 
@@ -1332,9 +1322,8 @@ Revert each.
 
 ```bash
 the formatter and linter
-sl add ui/src/query.ts ui/tests/query.test.ts
-sl commit ui -m "ditz2-ui: parse the filter field into a Filter and a regex" \
-  --reason "commit the ui filter-query parser - sl help commit"
+git add ui/src/query.ts ui/tests/query.test.ts
+git commit ui -m "ditz2-ui: parse the filter field into a Filter and a regex"
 ```
 
 ---
@@ -1856,9 +1845,8 @@ easiest to write a test for that passes by luck.
 
 ```bash
 the formatter and linter
-sl add ui/src/state.ts ui/tests/state.test.ts ui/tests/fixtures.ts
-sl commit ui -m "ditz2-ui: add the reducer, with selection tracked by issue id" \
-  --reason "commit the ui state reducer - sl help commit"
+git add ui/src/state.ts ui/tests/state.test.ts ui/tests/fixtures.ts
+git commit ui -m "ditz2-ui: add the reducer, with selection tracked by issue id"
 ```
 
 ---
@@ -2169,7 +2157,6 @@ describe('<IssueList>', () => {
 - [ ] **Step 4: Run and watch both fail**
 
 ```bash
-source the local bootstrap script
 npm run test --workspace ditz2-ui
 ```
 
@@ -2336,10 +2323,9 @@ Expected: PASS.
 
 ```bash
 the formatter and linter
-sl add ui/src/format.ts ui/src/components ui/tests/helpers.tsx \
+git add ui/src/format.ts ui/src/components ui/tests/helpers.tsx \
   ui/tests/format.test.ts ui/tests/list.test.tsx
-sl commit ui -m "ditz2-ui: render the issue list, with a derived scroll window" \
-  --reason "commit the ui list rendering - sl help commit"
+git commit ui -m "ditz2-ui: render the issue list, with a derived scroll window"
 ```
 
 ---
@@ -2773,9 +2759,8 @@ Expected: PASS. If the `Home`/`End` test fails, print `key` from inside
 
 ```bash
 the formatter and linter
-sl add ui/src/app.tsx ui/src/components/Chrome.tsx ui/tests/app-keys.test.tsx
-sl commit ui -m "ditz2-ui: add the app shell, navigation keys and chrome" \
-  --reason "commit ui navigation and chrome - sl help commit"
+git add ui/src/app.tsx ui/src/components/Chrome.tsx ui/tests/app-keys.test.tsx
+git commit ui -m "ditz2-ui: add the app shell, navigation keys and chrome"
 ```
 
 ---
@@ -2992,7 +2977,6 @@ describe('<Detail>', () => {
 - [ ] **Step 2: Run and watch it fail**
 
 ```bash
-source the local bootstrap script
 npm run test --workspace ditz2-ui
 ```
 
@@ -3178,9 +3162,8 @@ what `marked()` finds.
 
 ```bash
 the formatter and linter
-sl add ui/src/components/Detail.tsx ui/tests/detail.test.tsx
-sl commit ui -m "ditz2-ui: add the detail pane" \
-  --reason "commit the ui detail pane - sl help commit"
+git add ui/src/components/Detail.tsx ui/tests/detail.test.tsx
+git commit ui -m "ditz2-ui: add the detail pane"
 ```
 
 ---
@@ -3757,10 +3740,9 @@ Expected: PASS, including every earlier test.
 
 ```bash
 the formatter and linter
-sl add ui/src/components/FilterField.tsx ui/src/components/HelpOverlay.tsx \
+git add ui/src/components/FilterField.tsx ui/src/components/HelpOverlay.tsx \
   ui/tests/app-filter.test.tsx
-sl commit ui -m "ditz2-ui: add the filter field, refresh and the help overlay" \
-  --reason "commit ui filter, refresh and help - sl help commit"
+git commit ui -m "ditz2-ui: add the filter field, refresh and the help overlay"
 ```
 
 ---
@@ -3771,7 +3753,7 @@ Everything so far has been tested against `ink-testing-library`, which renders
 to a string. This task builds the two real entry points and runs the built
 binaries in a real pty against a real project on disk.
 
-That distinction has already cost this project twice: `link(2)` failed on EdenFS
+That distinction has already cost this project twice: `link(2)` failed on a FUSE-backed checkout
 while 291 tests passed, and `uuid@11`'s global `crypto` was polyfilled by vitest
 and absent from the built binary. A UI that only ever renders to a string is the
 same shape of gap.
@@ -3932,7 +3914,6 @@ describe('the UI in a real terminal', () => {
 - [ ] **Step 2: Run and watch it fail**
 
 ```bash
-source the local bootstrap script
 npm run build && npm run test --workspace ditz2-ui
 ```
 
@@ -3940,7 +3921,7 @@ Expected: FAIL — `ui/dist/main.js` does not exist.
 
 - [ ] **Step 3: Write `ui/src/index.tsx`**
 
-Rename `ui/src/index.ts` to `ui/src/index.tsx` with `sl mv`, then replace its
+Rename `ui/src/index.ts` to `ui/src/index.tsx` with `git mv`, then replace its
 contents:
 
 ```tsx
@@ -4112,7 +4093,7 @@ A full-screen terminal UI for [ditz2](../README.md), built on Ink.
 Neither package is published yet, so install from a clone:
 
 ```
-sl clone <this repo> && cd ditz2
+git clone <this repo> && cd ditz2
 npm install                     # links ditz2 into ui/ as a workspace
 npm run build                   # the ditz2 CLI
 npx tsc -p ui/tsconfig.json && chmod +x ui/dist/main.js
@@ -4211,10 +4192,9 @@ npm run typecheck && npm run build && npx vitest run
 rm -rf .dz-fstest
 npm run test:all
 the formatter and linter
-sl add ui/src/index.tsx ui/src/main.ts ui/tests/e2e.test.ts ui/README.md
-sl commit ui README.md HANDOFF.md \
-  -m "ditz2-ui: add the entry points, the dzui binary and a pty end-to-end test" \
-  --reason "commit the ui entry points and e2e test - sl help commit"
+git add ui/src/index.tsx ui/src/main.ts ui/tests/e2e.test.ts ui/README.md
+git commit ui README.md HANDOFF.md \
+  -m "ditz2-ui: add the entry points, the dzui binary and a pty end-to-end test"
 ```
 
 ---
@@ -5044,14 +5024,14 @@ The plan is done when all of these hold. Each is a command, not a judgement.
       (Task 1); `src/cli/help.ts` gains a tutorial step and a contract line
       (Task 3).
 
-      Verify against the base commit, not the working tree — `sl status` is
+      Verify against the base commit, not the working tree — `git status` is
       empty when everything is committed, which is how this check has been run
       uselessly here before:
 
       ```bash
-      sl log -r . -T "{node|short}\n"
-      sl status --rev <plan-commit> --rev . tests/ src/
-      sl diff --rev <plan-commit> src/api/api.test.ts | awk '/^-[^-]/ { n++ } END { print n+0 }'
+      git log -r . -T "{node|short}\n"
+      git status --rev <plan-commit> --rev . tests/ src/
+      git diff --rev <plan-commit> src/api/api.test.ts | awk '/^-[^-]/ { n++ } END { print n+0 }'
       ```
 
       **`<plan-commit>` is the commit that added this plan document, not the
@@ -5061,14 +5041,14 @@ The plan is done when all of these hold. Each is a command, not a judgement.
       the plan commit, where `M src/api/api.test.ts` is the one expected
       modification among test files.
 
-      `sl status` should show `A tests/cli/ui.test.ts`, `A src/cli/ui.test.ts`
+      `git status` should show `A tests/cli/ui.test.ts`, `A src/cli/ui.test.ts`
       and `M src/api/api.test.ts` among the test files, and no other `M` on
       one. The `awk` line must print `0`: append-only means no removed lines.
       If it prints anything else, an existing test was changed to accommodate
       the work, which is the failure this check exists to catch.
 
       `awk`, not `grep`, and not because the pipe would traverse anything —
-      it reads one command's output. The rule in `a large monorepo/CLAUDE.md` is
+      it reads one command's output. The rule in the repository's `CLAUDE.md` is
       absolute about the command name, and a plan that carves out an exception
       teaches the next reader to carve out their own.
 - [ ] `ditz2`'s `dependencies` are still exactly `commander`, `uuid`, `yaml`.
@@ -5076,16 +5056,16 @@ The plan is done when all of these hold. Each is a command, not a judgement.
       constant and its dynamic import) and `src/cli/help.ts` (the tutorial step
       and the `--json` exception).
 
-      **Do not use `grep`, `find` or `rg` for this.** `a large monorepo/CLAUDE.md`
+      **Do not use `grep`, `find` or `rg` for this.** the repository's `CLAUDE.md`
       forbids them outright, and `grep -c ditz2-ui src/` — the obvious
       formulation — does not recurse into a directory: it prints nothing and
       exits 1, so it reports "clean" for every possible state of the tree.
       Delegate to the `meta_codesearch:code-search` agent instead, thoroughness
-      "quick", asking where `ditz2-ui` appears under `src/`. (Outside a large monorepo
+      "quick", asking where `ditz2-ui` appears under `src/`. (Outside such a repository
       an ordinary repository-wide search does the same job; no such command is
       named here, because every one of them is banned in this checkout and a
       reader skimming for something to paste should not find one.)
-- [ ] The UI runs against **this repository's own backlog**, on EdenFS, not
+- [ ] The UI runs against **this repository's own backlog**, on a FUSE-backed checkout, not
       under `os.tmpdir()`:
 
       ```bash

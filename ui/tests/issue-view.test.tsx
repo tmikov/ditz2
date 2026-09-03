@@ -13,7 +13,7 @@ import { initialState } from '../src/state.js';
 import type { Project } from 'ditz2';
 import { IssueView, maxIssueOffset } from '../src/components/IssueView.js';
 import { issueLines } from '../src/format.js';
-import { KEY, lines, press, settle } from './helpers.js';
+import { footerOf, KEY, lines, press, settle } from './helpers.js';
 import { issue } from './fixtures.js';
 
 const short = issue({
@@ -198,7 +198,7 @@ describe('the issue screen footer', () => {
   it('advertises enter as the way back, alongside esc and q', async () => {
     const { lastFrame, stdin } = mount();
     await press(stdin, KEY.down, KEY.enter);
-    const footer = lines(lastFrame()).at(-1) ?? '';
+    const footer = footerOf(lastFrame());
     expect(footer).toContain('enter/esc back');
     expect(footer).toContain('q back');
   });
@@ -206,9 +206,9 @@ describe('the issue screen footer', () => {
   it('does not advertise the list screen bindings that do nothing here', async () => {
     const { lastFrame, stdin } = mount();
     await press(stdin, KEY.down, KEY.enter);
-    const footer = lines(lastFrame()).at(-1) ?? '';
+    const footer = footerOf(lastFrame());
     expect(footer).not.toContain('/ filter');
-    expect(footer).not.toContain('r refresh');
+    expect(footer).not.toContain('r reload');
     expect(footer).not.toContain('q quit');
   });
 });

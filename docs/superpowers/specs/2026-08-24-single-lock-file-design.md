@@ -47,7 +47,7 @@ This is a cooperative protocol. Direct manual edits cannot participate in it.
 ### What the lock does not protect
 
 The lock serializes dz's own mutations against each other. It does not make a
-concurrent `git commit` or `sl commit` atomic with respect to them. A commit
+concurrent `git commit` or `git commit` atomic with respect to them. A commit
 taken while an agent is working can capture issue A updated and issue B not yet:
 nothing is corrupt, but the snapshot is mid-sequence. Closing that would mean
 holding the lock across someone else's commit, which is not this tool's
@@ -106,11 +106,12 @@ tracked file that the next checkout restores.
 temporary file and `link(2)`-ing it into place, on the grounds that `O_EXCL`
 leaves a window in which another process sees an empty `dz/.lock`, reads it as
 malformed, and `unlock --force` deletes a live lock. The reasoning holds, but
-the mechanism does not: EdenFS, the virtual filesystem backing a large monorepo, where
+the mechanism does not: a FUSE-backed virtual filesystem, of the kind large repositories are
+sometimes served from, where
 ditz2 is developed, rejects `link(2)` with `EPERM`. Every mutating command
 failed in ditz2's own repository while the whole test suite passed, because the
 tests build their projects under `os.tmpdir()`. `O_EXCL`, `mkdir` and `rename`
-all work on EdenFS; `link` alone does not.
+all work on such a filesystem; `link` alone does not.
 
 The window is therefore real and is handled rather than designed away:
 `breakLock` re-reads before removing and refuses to break a malformed lock that
@@ -119,7 +120,7 @@ like. A lock that is still unparseable on the second read is malformed for good.
 
 `tests/cli/repo-filesystem.test.ts` runs a project on the checkout's own
 filesystem for this reason. On an ordinary clone it duplicates the existing
-coverage; inside a large monorepo it is the only test that exercises the case that
+coverage; inside such a checkout it is the only test that exercises the case that
 broke.
 
 **`edit` is the deliberate exception to step 5.** It reads its baseline before
@@ -336,7 +337,7 @@ through the existing `writeIssue`, rather than renaming the scratch over the
 target.
 
 This matters for placement. `rename` is only atomic within a filesystem, and
-fails with `EXDEV` across one — verified here, where the checkout is EdenFS and
+fails with `EXDEV` across one — verified here, where the checkout is FUSE-backed and
 `os.tmpdir()` is btrfs. Committing by rename would therefore force the scratch
 onto the same filesystem as the issue. Committing through `writeIssue` does not:
 the scratch is only ever read, and `writeIssue` does its own same-directory temp

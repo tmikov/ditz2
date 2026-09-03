@@ -115,7 +115,7 @@ is visible rather than `.dz/` so issues stay browsable on a forge and greppable 
 `init` writes `dz/.gitignore` containing `config.local.yaml`, unconditionally. A nested
 `.gitignore` is self-contained: it never modifies a file outside `dz/`, it is idempotent, it works
 correctly when the project sits inside a monorepo whose root is far above, and both git and
-the local VCS honor it. Writing it unconditionally avoids VCS detection entirely, and the file is inert
+other VCS tools honor it. Writing it unconditionally avoids VCS detection entirely, and the file is inert
 outside a repository.
 
 Author identity resolves in this order:
@@ -125,7 +125,7 @@ Author identity resolves in this order:
 3. Error, naming both of the above
 
 At `init`, identity is probed once from `git config user.name` / `user.email`, falling back to the
-the local VCS equivalent, and written to `config.local.yaml`. This probe is the only place in the entire
+its equivalent in other VCS tools, and written to `config.local.yaml`. This probe is the only place in the entire
 tool that shells out to a VCS. If both probes fail, `init` still succeeds and reports that
 `DZ_AUTHOR` must be set.
 

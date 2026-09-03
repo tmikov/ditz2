@@ -157,10 +157,10 @@ export function acquireLock(
     //
     // Publishing the file already-complete via link(2) would remove the window
     // entirely, and an earlier version did exactly that. It cannot be used:
-    // EdenFS, the virtual filesystem some large monorepos are served from,
-    // rejects link(2) with EPERM, so every mutating command failed inside such
-    // a checkout. O_EXCL, mkdir and rename all work there; link alone
-    // does not.
+    // some virtual filesystems -- the FUSE-backed checkouts large repositories
+    // are sometimes served from -- reject link(2) with EPERM, so every mutating
+    // command failed inside such a checkout. O_EXCL, mkdir and rename all work
+    // there; link alone does not.
     let fd: number;
     try {
       fd = fs.openSync(file, 'wx', 0o600);

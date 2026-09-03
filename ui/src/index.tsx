@@ -110,8 +110,11 @@ function takeScreen(): () => void {
  * Atomics.wait for up to two seconds of synchronous blocking, during which Ink
  * cannot repaint, cannot read a keystroke, and — because Ink registers a
  * signal-exit handler that suppresses Node's default terminate — cannot be
- * interrupted with Ctrl-C either. Nothing here writes, so nothing should reach
- * a lock; the setting is what keeps that true when plan 2b adds mutations.
+ * interrupted with Ctrl-C either. The UI writes now, so this is load-bearing
+ * rather than prophylactic: every `c` on a contended project reaches
+ * acquireLock, and the difference between 0 and the default is measured in
+ * ui/tests/e2e.test.ts — 'refuses a contended write immediately instead of
+ * freezing', which holds the lock from outside and bounds the run.
  */
 export async function runUi(opts: RunUiOptions): Promise<number> {
   // A pty with no winsize reports rows and columns as 0 rather than undefined,

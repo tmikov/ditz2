@@ -14,6 +14,28 @@ import type { Config, Issue, Status } from './types.js';
 /** Statuses `set --status` will accept. Closing needs a resolution, so it is excluded. */
 export type SettableStatus = Exclude<Status, 'closed'>;
 
+/**
+ * The one status `set` refuses, spelled once.
+ *
+ * The list below and the check beneath it have to agree, and the way they
+ * agree is by both reading this rather than each naming `closed` for itself.
+ */
+const UNSETTABLE: Status = 'closed';
+
+/**
+ * The same rule as a list, for a caller that has to offer a choice.
+ *
+ * That this line computes the list rather than spelling it out is a property
+ * no test can observe: any wrong element either happens to equal what the
+ * filter would have produced (so it isn't wrong) or is rejected by
+ * `assertSettableStatus`, which `validate.test.ts` already checks — a second
+ * test asserting "no element here is wrong" would have to recompute this
+ * same filter to compare against, i.e. rewrite this line to check it.
+ * Keeping the derivation, not adding a test for it, is what review is for.
+ */
+export const SETTABLE_STATUSES: readonly SettableStatus[] =
+  STATUSES.filter((s): s is SettableStatus => s !== UNSETTABLE);
+
 export function validateEnum<T extends string>(
   value: string, allowed: readonly T[], field: string,
 ): T {
@@ -40,7 +62,7 @@ export function validateComponent(component: string | null, config: Config | nul
 }
 
 export function assertSettableStatus(next: string): asserts next is SettableStatus {
-  if (next === 'closed') {
+  if (next === UNSETTABLE) {
     throw new DzError(
       'INVALID_FIELD',
       "cannot set status to 'closed' with 'set', because that would leave the resolution empty; " +

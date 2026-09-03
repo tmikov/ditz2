@@ -471,4 +471,12 @@ describe('the surface a UI reads', () => {
     // null rather than the throw resolveAuthor raises for a write.
     expect(openProject(tmp, { env: {} }).whoami()).toBeNull();
   });
+
+  it('publishes the vocabularies a consumer would otherwise retype', () => {
+    // ditz2-ui builds its pickers from these. Anything it cannot import it
+    // would have to spell for itself, and a UI offering a value the facade
+    // rejects is a form that cannot be saved.
+    expect(api.SETTABLE_STATUSES).not.toContain('closed');
+    expect(api.ISSUE_TYPES).toContain(api.DEFAULT_ISSUE_TYPE);
+  });
 });

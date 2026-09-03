@@ -255,3 +255,205 @@ describe('load failures', () => {
     expect(initialState([], failures).failures).toHaveLength(1);
   });
 });
+
+const HOLDER = {
+  version: 1, token: 't', pid: 4821, hostname: 'box',
+  created: '2026-08-30 10:00', command: 'comment',
+} as const;
+
+describe('the mutation lifecycle', () => {
+  it('starts idle', () => {
+    const s = start();
+    expect(s.pending).toBeNull();
+    expect(s.waitingFor).toBeNull();
+  });
+
+  it('marks a write in flight and clears it on success', () => {
+    let s = run(start(), { type: 'openComment' });
+    s = run(s, { type: 'mutationStarted', op: 'comment' });
+    expect(s.pending).toEqual({ op: 'comment' });
+    s = run(s, { type: 'mutationSucceeded', issues: three(), failures: [] });
+    expect(s.pending).toBeNull();
+    // The overlay closes on success: leaving it open invites a second write
+    // the operator did not intend.
+    expect(s.overlay).toBeNull();
+  });
+
+  it('turns a refused lock into waitingFor, not an error', () => {
+    // LOCKED is the ordinary case for this tool — agents write alongside the
+    // operator — so it is a state with a retry, not a dialog with an OK button.
+    let s = run(start(), { type: 'mutationStarted', op: 'comment' });
+    s = run(s, { type: 'mutationLocked', op: 'comment', holder: HOLDER, at: 1000 });
+    expect(s.overlay).toEqual({ kind: 'waiting' });
+    expect(s.waitingFor).toMatchObject({ op: 'comment', holder: HOLDER, attempts: 1 });
+    expect(s.pending).toBeNull();
+  });
+
+  it('counts attempts across retries and keeps the first timestamp', () => {
+    // `since` is what the elapsed display is computed from, so a retry must
+    // not reset it — otherwise the timer restarts at zero every second and
+    // never tells the operator how long they have actually been waiting.
+    let s = run(start(), { type: 'mutationLocked', op: 'comment', holder: HOLDER, at: 1000 });
+    s = run(s, { type: 'mutationLocked', op: 'comment', holder: HOLDER, at: 4000 });
+    expect(s.waitingFor).toMatchObject({ since: 1000, attempts: 2 });
+  });
+
+  it('counts them across the mutationStarted a real retry goes through', () => {
+    // The sequence above is not the one runMutation produces: every call it
+    // makes, retries included, opens with mutationStarted. Clearing waitingFor
+    // there made the two adjacent mutationLocked dispatches above the only
+    // sequence in which the counter worked, and the UI reset to "waiting 0s,
+    // 1 attempt" on every press of r. Each action was right on its own; the
+    // composition was not.
+    let s = run(start(), { type: 'mutationStarted', op: 'comment' });
+    s = run(s, { type: 'mutationLocked', op: 'comment', holder: HOLDER, at: 1000 });
+    s = run(s, { type: 'mutationStarted', op: 'comment' });
+    s = run(s, { type: 'mutationLocked', op: 'comment', holder: HOLDER, at: 4000 });
+    expect(s.waitingFor).toMatchObject({ since: 1000, attempts: 2 });
+  });
+
+  it('starts a different op\'s wait from scratch rather than inheriting one', () => {
+    // A wait carried over from another operation would tell the operator that
+    // this write has been refused twice over four seconds when it has been
+    // refused once, just now. Only the retry of the wait still on screen may
+    // keep the counters, and the reducer decides that for itself: it does not
+    // get to assume the keyboard handler kept every other op out.
+    let s = run(start(), { type: 'mutationStarted', op: 'comment' });
+    s = run(s, { type: 'mutationLocked', op: 'comment', holder: HOLDER, at: 1000 });
+    s = run(s, { type: 'mutationStarted', op: 'close' });
+    s = run(s, { type: 'mutationLocked', op: 'close', holder: HOLDER, at: 5000 });
+    expect(s.waitingFor).toMatchObject({ op: 'close', since: 5000, attempts: 1 });
+  });
+
+  it('starts it from scratch even reached without the mutationStarted between', () => {
+    // The same property as the test above, minus the case that was actually
+    // enforcing it. That one goes through mutationStarted, which nulls
+    // waitingFor for a different op one case earlier in the reducer — so it
+    // passed with mutationLocked inheriting whatever it found, and the
+    // guarantee lived in the neighbouring case rather than in this one. There
+    // is no route here through the UI today; that is the point. A reducer that
+    // borrows a safety property from the case beside it has not got one, and
+    // plan 2c leans on this hardest.
+    let s = run(start(), { type: 'mutationLocked', op: 'comment', holder: HOLDER, at: 1000 });
+    s = run(s, { type: 'mutationLocked', op: 'close', holder: HOLDER, at: 5000 });
+    expect(s.waitingFor).toMatchObject({ op: 'close', since: 5000, attempts: 1 });
+  });
+
+  it('does not treat a wait the operator has left as a retry', () => {
+    // The overlay is what makes a wait live. Four actions replace it without
+    // clearing waitingFor — openFilter, closeFilter, toggleHelp and openIssue
+    // — so "waitingFor is still set" is not on its own evidence that the next
+    // write is a retry of it. Reachability today rests on the waiting branch
+    // of useInput swallowing those keys, which is a fact about a different
+    // file that this one cannot check.
+    let s = run(start(), { type: 'mutationStarted', op: 'comment' });
+    s = run(s, { type: 'mutationLocked', op: 'comment', holder: HOLDER, at: 1000 });
+    s = run(s, { type: 'toggleHelp' });
+    s = run(s, { type: 'mutationStarted', op: 'comment' });
+    s = run(s, { type: 'mutationLocked', op: 'comment', holder: HOLDER, at: 5000 });
+    expect(s.waitingFor).toMatchObject({ since: 5000, attempts: 1 });
+  });
+
+  it('reports a holder it could not read', () => {
+    // breakLock and lockState both admit a lock they cannot parse. A UI that
+    // renders `undefined (pid undefined)` is worse than one that says so.
+    const s = run(start(), { type: 'mutationLocked', op: 'comment', holder: null, at: 1000 });
+    expect(s.waitingFor?.holder).toBeNull();
+  });
+
+  it('turns any other failure into an error overlay carrying its message', () => {
+    const s = run(start(), {
+      type: 'mutationFailed', op: 'comment',
+      message: 'no author identity: set DZ_AUTHOR',
+    });
+    expect(s.overlay).toEqual({ kind: 'error', message: 'no author identity: set DZ_AUTHOR' });
+    expect(s.pending).toBeNull();
+    expect(s.waitingFor).toBeNull();
+  });
+
+  it('replaces the snapshot on success rather than patching it', () => {
+    const s = run(start(),
+      { type: 'mutationStarted', op: 'comment' },
+      { type: 'mutationSucceeded', issues: three().slice(0, 2), failures: [] });
+    expect(visibleIssues(s)).toHaveLength(2);
+  });
+
+  it('keeps the selection across a write, by id', () => {
+    const s = run(start(), { type: 'move', delta: 2 },
+      { type: 'mutationSucceeded', issues: [...three()].reverse(), failures: [] });
+    expect(selectedIssue(s)?.title).toBe('gamma');
+  });
+
+  it('moves the selection off a stale id when the write filters it out from under the cursor', () => {
+    // This is the case reselect exists for: the write itself removed the
+    // selected issue, so the cursor must land on something real in the new
+    // snapshot rather than dangling on an id that no longer resolves.
+    const s = run(start(), { type: 'move', delta: 2 },
+      { type: 'mutationSucceeded', issues: three().slice(0, 2), failures: [] });
+    expect(s.selectedId).not.toBeNull();
+    expect(selectedIssue(s)?.title).toBe('alpha');
+  });
+
+  it('clears a stale error when the next write starts', () => {
+    // An error line that outlives the thing it described is a UI lying about
+    // the state of the project.
+    const s = run(start(),
+      { type: 'mutationFailed', op: 'comment', message: 'boom' },
+      { type: 'mutationStarted', op: 'close' });
+    expect(s.overlay).toBeNull();
+    expect(s.pending).toEqual({ op: 'close' });
+  });
+
+  it('closes the waiting overlay when the operator gives up', () => {
+    const s = run(start(),
+      { type: 'mutationLocked', op: 'comment', holder: HOLDER, at: 1000 },
+      { type: 'closeOverlay' });
+    expect(s.overlay).toBeNull();
+    expect(s.waitingFor).toBeNull();
+  });
+
+  it('opens comment and close only with something selected', () => {
+    const empty = initialState([], []);
+    expect(run(empty, { type: 'openComment' }).overlay).toBeNull();
+    expect(run(empty, { type: 'openClose' }).overlay).toBeNull();
+    expect(run(start(), { type: 'openComment' }).overlay).toEqual({ kind: 'comment' });
+    expect(run(start(), { type: 'openClose' }).overlay).toEqual({ kind: 'close' });
+  });
+});
+
+describe('the form overlay', () => {
+  it('opens over the selected issue', () => {
+    expect(run(start(), { type: 'openForm', mode: 'set' }).overlay)
+      .toEqual({ kind: 'form' });
+  });
+
+  it('does nothing on an empty list, because there is nothing to change', () => {
+    expect(run(initialState([], []), { type: 'openForm', mode: 'set' }).overlay).toBeNull();
+  });
+
+  it('opens with nothing selected when the form is a new issue', () => {
+    // The one form that needs no selection. `n` on an empty backlog is
+    // exactly when somebody most wants it.
+    expect(run(initialState([], []), { type: 'openForm', mode: 'add' }).overlay)
+      .toEqual({ kind: 'form' });
+  });
+
+  it('clears a stale status line when any overlay opens', () => {
+    // `the close form needs a taller terminal` used to survive the terminal
+    // that caused it, because nothing cleared it and <Notice> draws under
+    // every overlay that is not an error. Recorded in HANDOFF.md as reachable
+    // with no error at all; this is the fix, in the one place all three
+    // openings share.
+    for (const action of [
+      { type: 'openComment' }, { type: 'openClose' }, { type: 'openForm', mode: 'set' },
+    ] as const) {
+      const s = run(start(), { type: 'notice', text: 'something older' }, action);
+      expect(s.notice, action.type).toBeNull();
+    }
+  });
+
+  it('moves the cursor to an id it is given', () => {
+    const s = run(start(), { type: 'select', id: three()[2]!.id });
+    expect(selectedIssue(s)?.title).toBe('gamma');
+  });
+});

@@ -23,6 +23,9 @@ export const STATUSES: readonly Status[] = ['open', 'in-progress', 'closed'];
 export const RESOLUTIONS: readonly Resolution[] = ['fixed', 'wontfix', 'duplicate'];
 export const ISSUE_TYPES: readonly IssueType[] = ['bug', 'feature', 'task'];
 
+/** What `dz add` and any other front-end assume when nobody says. */
+export const DEFAULT_ISSUE_TYPE: IssueType = 'task';
+
 export interface LogEntry {
   timestamp: string;
   author: string;

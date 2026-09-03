@@ -49,7 +49,7 @@ stay private.
 
 - Trailing newline on every new file. Unix line endings.
 - Run `the formatter` before each commit and `the linter` before declaring a task done.
-- Build and test with the the internal toolchain: `source the local bootstrap script` first,
+- Build and test with the any Node >= 20:
   then `npm run typecheck`, `npm run build`, `npx vitest run`.
 
 ## Correction to the spec
@@ -370,7 +370,7 @@ describe('reads', () => {
 - [ ] **Step 5: Run the new tests and watch them fail**
 
 ```bash
-source the local bootstrap script && npx vitest run src/api/api.test.ts
+npx vitest run src/api/api.test.ts
 ```
 
 Expected before Steps 1-3 exist: FAIL, "Cannot find module './read.js'". If
@@ -496,7 +496,6 @@ export function addFilterOptions(cmd: Command): Command {
 - [ ] **Step 10: Typecheck, build, run everything**
 
 ```bash
-source the local bootstrap script
 npm run typecheck && npm run build && npx vitest run
 ```
 
@@ -509,7 +508,7 @@ the test.
 
 ```bash
 the formatter and linter
-sl commit --reason "extract the read side of the api facade - sl help commit" -m 'ditz2: extract the read side into src/api
+git commit -m 'ditz2: extract the read side into src/api
 
 listIssues, showIssue, grepIssues, diagnoseProject and projectLockState move
 into src/api/read.ts, with the filter logic in src/api/filter.ts and the
@@ -790,7 +789,7 @@ describe('writes', () => {
 - [ ] **Step 3: Run the new tests**
 
 ```bash
-source the local bootstrap script && npx vitest run src/api/api.test.ts
+npx vitest run src/api/api.test.ts
 ```
 
 Expected: all pass. If the `LOCKED` timing assertion fails, `lockTimeoutMs` is
@@ -976,7 +975,6 @@ changes.
 - [ ] **Step 9: Typecheck, build, run everything**
 
 ```bash
-source the local bootstrap script
 npm run typecheck && npm run build && npx vitest run
 ```
 
@@ -993,7 +991,7 @@ than assuming.
 
 ```bash
 the formatter and linter
-sl commit --reason "extract the write side of the api facade - sl help commit" -m 'ditz2: extract the write side into src/api
+git commit -m 'ditz2: extract the write side into src/api
 
 addIssue, setFields, commentOn and closeIssueBy move into src/api/write.ts,
 each taking the project lock for its own read-modify-write exactly as the
@@ -1190,7 +1188,7 @@ describe('components, doctor and the lock', () => {
 - [ ] **Step 3: Run the new tests**
 
 ```bash
-source the local bootstrap script && npx vitest run src/api/api.test.ts
+npx vitest run src/api/api.test.ts
 ```
 
 Expected: all pass.
@@ -1311,7 +1309,6 @@ and `if (!breakLock(root, before))` becomes
 - [ ] **Step 7: Typecheck, build, run everything**
 
 ```bash
-source the local bootstrap script
 npm run typecheck && npm run build && npx vitest run
 ```
 
@@ -1325,7 +1322,7 @@ Expected: **330 pre-existing tests still pass with no test file edited**, plus
 
 ```bash
 the formatter and linter
-sl commit --reason "move components doctor and unlock onto the facade - sl help commit" -m 'ditz2: move components, doctor and unlock onto the facade
+git commit -m 'ditz2: move components, doctor and unlock onto the facade
 
 listComponents, addComponent, removeComponent and breakProjectLock join
 src/api/write.ts; doctor and lock state were already in src/api/read.ts from
@@ -1495,7 +1492,7 @@ describe('saveEdited', () => {
 - [ ] **Step 3: Run the new tests**
 
 ```bash
-source the local bootstrap script && npx vitest run src/api/api.test.ts
+npx vitest run src/api/api.test.ts
 ```
 
 Expected: all pass.
@@ -1606,7 +1603,7 @@ under the lock. Both checks stay.
 
 ```bash
 grep -rn "from './lock.js'" src/cli/ || echo "no importers"
-sl remove --reason "the lock helper moved into src/api/session.ts - sl help remove" src/cli/lock.ts
+git rm src/cli/lock.ts
 ```
 
 If anything still imports it, stop and report — do not work around it.
@@ -1614,7 +1611,6 @@ If anything still imports it, stop and report — do not work around it.
 - [ ] **Step 6: Typecheck, build, run everything**
 
 ```bash
-source the local bootstrap script
 npm run typecheck && npm run build && npx vitest run
 ```
 
@@ -1630,7 +1626,7 @@ reload test fails, the baseline threading in the loop above is wrong.
 
 ```bash
 the formatter and linter
-sl commit --reason "move the edit compare-and-swap into the facade - sl help commit" -m 'ditz2: move the edit compare-and-swap into the facade
+git commit -m 'ditz2: move the edit compare-and-swap into the facade
 
 saveEdited writes an issue only if its file still contains exactly the bytes
 the edit was based on, comparing under the lock immediately before the write.
@@ -1869,7 +1865,7 @@ describe('openProject', () => {
 - [ ] **Step 4: Run it and confirm it passes**
 
 ```bash
-source the local bootstrap script && npm run build && npx vitest run src/api/api.test.ts
+npm run build && npx vitest run src/api/api.test.ts
 ```
 
 - [ ] **Step 5: Verify the private modules really are unreachable**
@@ -1878,10 +1874,9 @@ This is the only check that the `exports` map does its job. It must run against
 a packed tarball, not the source tree.
 
 ```bash
-source the local bootstrap script
 npm pack --silent
 mkdir -p /tmp/dz-export-check && cd /tmp/dz-export-check && npm init -y >/dev/null
-npm install /data/users/tmikov/a large monorepo/users/tm/tmikov/ditz2/ditz2-0.1.0.tgz >/dev/null
+npm install ./ditz2-0.1.0.tgz >/dev/null
 node --input-type=module -e "
   const ok = await import('ditz2');
   console.log('public entry:', typeof ok.openProject === 'function' ? 'OK' : 'MISSING');
@@ -1986,7 +1981,6 @@ do this, because a synchronous wait blocks its event loop.
 - [ ] **Step 8: Typecheck, build, run everything one last time**
 
 ```bash
-source the local bootstrap script
 npm run typecheck && npm run build && npx vitest run
 ```
 
@@ -1998,7 +1992,7 @@ Expected: **330 pre-existing tests still pass with no test file edited**, plus
 The whole plan is measured by one claim. Verify it rather than assume it:
 
 ```bash
-sl status tests/ --reason "prove no test file was modified by the refactor - sl help status"
+git status tests/
 ```
 
 Expected: **no output**. Not one file under `tests/` may be modified by this
@@ -2006,7 +2000,7 @@ plan. `src/**/*.test.ts` may gain `src/api/api.test.ts` and nothing else should
 change there either:
 
 ```bash
-sl status 'glob:src/**/*.test.ts' --reason "check unit test changes - sl help status"
+git status 'glob:src/**/*.test.ts'
 ```
 
 Expected: only `A src/api/api.test.ts`.
@@ -2017,7 +2011,7 @@ If either shows anything else, stop and work out what behaviour changed.
 
 ```bash
 the formatter and linter
-sl commit --reason "add the public api entry point and exports map - sl help commit" -m 'ditz2: publish a narrow API alongside the CLI
+git commit -m 'ditz2: publish a narrow API alongside the CLI
 
 openProject binds a session to the operations the commands already call and is
 the only path named in the exports map. store/, core/ and render/ stay private:
@@ -2035,7 +2029,7 @@ flag.
 Test Plan:
 - npm run typecheck clean, the linter clean
 - npx vitest run: 358 passing
-- `sl status tests/` is empty: the refactor did not modify a single existing
+- `git status tests/` is empty: the refactor did not modify a single existing
   test, which is the gate this plan set for itself
 - packed-tarball check confirms the private modules are unreachable'
 ```
@@ -2051,4 +2045,4 @@ Test Plan:
 - Every command except `init`, `schema` and `help` is parsing plus one facade
   call plus one render.
 - `package.json` has an `exports` map naming only the API entry.
-- 358 tests pass, and `sl status tests/` is empty.
+- 358 tests pass, and `git status tests/` is empty.
