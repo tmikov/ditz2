@@ -33,7 +33,8 @@
     "test": "npm run build && vitest run",
     "test:ui": "npm run build && tsc -p ui/tsconfig.json && chmod +x ui/dist/main.js && tsc -p ui/tsconfig.test.json && vitest run --root ui",
     "test:all": "npm test && npm run test:ui",
-    "hermes": "node scripts/hermes/build.mjs"
+    "hermes": "node scripts/hermes/build.mjs",
+    "hermes:dist": "node scripts/hermes/build.mjs --dist"
   },
   "dependencies": {
     "commander": "^14.0.3",

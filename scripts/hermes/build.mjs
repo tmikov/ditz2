@@ -40,8 +40,8 @@ function write(file, data) {
   fs.writeFileSync(file, data);
 }
 
-function run(file, args) {
-  execFileSync(file, args, { cwd: REPO, stdio: 'inherit' });
+function run(file, args, env = {}) {
+  execFileSync(file, args, { cwd: REPO, stdio: 'inherit', env: { ...process.env, ...env } });
 }
 
 /** The staged ditz2: a plain tsc recompile, plus a generated manifest. */
@@ -119,6 +119,56 @@ async function stageDitz2Ui() {
   );
 }
 
+/** Where --build-exe's link kit lives: beside the binary in a cmake build. */
+function kitDir() {
+  if (process.env.HERMES_KIT) return process.env.HERMES_KIT;
+  return path.join(path.dirname(path.dirname(process.env.HERMES_NODE)), 'kit');
+}
+
+/**
+ * Record yoga's WebAssembly, bake it into a container, and link an executable.
+ *
+ * Recording needs no terminal, which the design assumed it would because
+ * `examples/ink` drives one. The yoga shim starts `loadYoga()` at module
+ * scope, so requiring the staged bundle and staying alive long enough for it
+ * to settle compiles the module -- the same thing ui-bundle.test.ts already
+ * does to prove the barrier. That matters beyond convenience: this script
+ * cannot spell `script` itself without breaking the rule in CLAUDE.md that
+ * tests/pty.ts is the only place that decides its GNU/BSD form.
+ *
+ * Baking is not optional. Ink loads the Wasm as its module graph loads, so an
+ * unbaked container pays the whole compile at every launch -- which is most of
+ * what bundling was supposed to buy.
+ */
+function buildDist() {
+  const out = path.join(STAGING, 'dist');
+  const rec = path.join(STAGING, 'wasm-record.bin');
+  const hbb = path.join(out, 'dz.hbb');
+  fs.mkdirSync(out, { recursive: true });
+
+  run(process.env.HERMES_NODE, [
+    `--record-wasm=${rec}`, '--no-compile-cache',
+    '-e', `require(${JSON.stringify(path.join(NM, 'ditz2-ui', 'index.js'))});`
+      + ' setTimeout(function () {}, 2000);',
+  ]);
+
+  run(process.env.HERMES_NODE, [
+    `--build-bundle=${hbb}`, `--bake-wasm=${rec}`,
+    path.join(NM, 'ditz2', 'cli', 'main.js'),
+  ]);
+
+  const kit = kitDir();
+  if (!fs.existsSync(path.join(kit, 'kit.manifest'))) {
+    throw new Error(
+      `hermes build: no link kit at ${kit}.\n`
+      + 'Set $HERMES_KIT to one, or build the hermes-node-kit target in the '
+      + 'hermes-node checkout. --build-exe cannot link without it.',
+    );
+  }
+  run(process.env.HERMES_NODE, [`--build-exe=${path.join(out, 'dz')}`, `--kit=${kit}`, hbb]);
+  return path.join(out, 'dz');
+}
+
 // The Node build first. Two checks compare against `dist/` -- one of them
 // exists to catch a CJS emit landing there by mistake -- and `dist/` is
 // gitignored, so a fresh clone has none. Leaving it to a remembered manual
@@ -136,7 +186,16 @@ stageDitz2();
 await stageDitz2Ui();
 console.log(`staged ditz2 and ditz2-ui into ${path.relative(REPO, NM)}`);
 
+// `--dist` is opt-in because linking is the slow part and most runs only want
+// the staging tree. The artifacts are produced before the checks below so
+// tests/hermes/dist.test.ts has something to check.
+const dist = process.argv.includes('--dist') ? buildDist() : null;
+if (dist !== null) console.log(`linked ${path.relative(REPO, dist)}`);
+
 // Building and verifying are one command on purpose: tests/hermes/ skips
 // itself without $HERMES_NODE, and a suite that only ever skips is not a
-// check. Running it here means every build exercises it.
-run(path.join(REPO, 'node_modules', '.bin', 'vitest'), ['run', 'tests/hermes']);
+// check. Running it here means every build exercises it. DZ_DIST is set only
+// for a --dist run, so the executable's own checks run exactly when there is
+// an executable to run them against.
+run(path.join(REPO, 'node_modules', '.bin', 'vitest'), ['run', 'tests/hermes'],
+  dist === null ? {} : { DZ_DIST: dist });
