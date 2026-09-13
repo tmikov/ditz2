@@ -1,0 +1,24 @@
+{
+  "//": [
+    "Emits src/ as CommonJS into the hermes staging tree. hermes-node has no",
+    "ES module loader yet and ditz2 is \"type\": \"module\", so its shipped",
+    "dist/ cannot be loaded there.",
+    "",
+    "Five settings differ from tsconfig.json. module and moduleResolution move",
+    "together: NodeNext resolution is not allowed with a CommonJS emit. outDir",
+    "must move or the emit lands in dist/ and overwrites the Node build.",
+    "declaration and sourceMap are off because this tree is an input to a",
+    "bundler, not a published artifact.",
+    "",
+    "No source is patched to make this work: src/ contains no import.meta and",
+    "no top-level await, either of which would have made this a rewrite."
+  ],
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "outDir": "build-hermes/node_modules/ditz2",
+    "declaration": false,
+    "sourceMap": false
+  }
+}
