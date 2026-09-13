@@ -10,6 +10,14 @@ finish a chunk of work.
 Any Node >= 20 and the public npm registry. Nothing else is required, and the
 already-built `./dist/cli/main.js` needs no toolchain at all.
 
+One exception: `npm run hermes` builds ditz2 to run under
+[hermes-node](https://github.com/tmikov/hermes-node-compat), and needs a
+`hermes-node` binary named by `$HERMES_NODE`. That is not on npm and cannot be
+obtained by `npm ci`. Nothing else in this repository needs it, and
+`tests/hermes/` skips itself when the variable is unset, so `npm ci && npm test`
+stays Node-and-npm-only. See
+`docs/superpowers/specs/2026-09-13-hermes-node-design.md`.
+
 ```bash
 npm ci
 npm run typecheck && npm run build && npx vitest run

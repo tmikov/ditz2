@@ -26,6 +26,15 @@ const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 const STAGING = path.join(REPO, 'build-hermes');
 const NM = path.join(STAGING, 'node_modules');
 
+// Checked before anything else runs, and in particular before
+// fs.rmSync(STAGING) below: an unset $HERMES_NODE must fail loud, leaving the
+// previous staging tree intact, rather than deleting it and only then
+// discovering there is no way to verify -- or use -- what replaces it.
+if (process.env.HERMES_NODE === undefined || process.env.HERMES_NODE === '') {
+  console.error('ERROR: $HERMES_NODE is not set; it must name a hermes-node binary.');
+  process.exit(2);
+}
+
 function write(file, data) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, data);
@@ -68,14 +77,26 @@ async function stageDitz2Ui() {
     '',
   ].join('\n'));
 
-  await esbuild.build({
+  // `write: false` is not an optimisation. esbuild writes the outfile before
+  // plugins' onEnd hooks run, so a build failed by the path-drift guard in
+  // ink-patches.mjs would still leave a complete, unpatched bundle on disk —
+  // and that bundle loads: CommonJS falls back to index.js when a directory
+  // has no package.json, so the whole of tests/hermes/ passes against it while
+  // the build that produced it exited 1. Holding the bytes in memory and
+  // writing them here means nothing lands unless every rule fired.
+  const built = await esbuild.build({
     entryPoints: [entry],
     outfile: path.join(NM, 'ditz2-ui', 'index.js'),
+    write: false,
     bundle: true,
     platform: 'node',
     format: 'cjs',
-    // Shared with the CLI half rather than embedded twice; resolved at run
-    // time from the staged sibling.
+    // `ditz2` is shared with the CLI half rather than embedded twice; it is
+    // resolved at run time from the staged sibling. `react-devtools-core` is
+    // never resolved at all: Ink imports it only from the `isDev()` branch
+    // that ink-patches.mjs rewrites to `false`, it is not a dependency of this
+    // project, and leaving it in the graph would fail the bundle at build time
+    // over code that cannot run.
     external: ['ditz2', 'react-devtools-core'],
     alias: { 'yoga-layout': path.join(REPO, 'scripts', 'hermes', 'yoga-shim.mjs') },
     plugins: [inkPatches],
@@ -89,6 +110,8 @@ async function stageDitz2Ui() {
     jsxImportSource: 'react',
     logLevel: 'warning',
   });
+
+  for (const out of built.outputFiles) write(out.path, out.contents);
 
   write(
     path.join(NM, 'ditz2-ui', 'package.json'),
@@ -112,3 +135,8 @@ write(
 stageDitz2();
 await stageDitz2Ui();
 console.log(`staged ditz2 and ditz2-ui into ${path.relative(REPO, NM)}`);
+
+// Building and verifying are one command on purpose: tests/hermes/ skips
+// itself without $HERMES_NODE, and a suite that only ever skips is not a
+// check. Running it here means every build exercises it.
+run(path.join(REPO, 'node_modules', '.bin', 'vitest'), ['run', 'tests/hermes']);

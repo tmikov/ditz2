@@ -1,0 +1,32 @@
+#!/bin/bash
+# Copyright (c) 2026 Tzvetan Mikov
+#
+# This source code is licensed under the MIT license found in the
+# LICENSE file in the root directory of this source tree.
+#
+# Runs the staged CommonJS ditz2 under hermes-node.
+#
+# The entry path is absolute and derived from this script's own location, and
+# this script deliberately does not cd: every dz command acts on the caller's
+# working directory, so changing it would point dz at the wrong project, and a
+# relative entry path would not be found from anywhere but the checkout.
+
+set -e
+
+if [ -z "$HERMES_NODE" ]; then
+  echo "ERROR: \$HERMES_NODE is not set." 1>&2
+  echo "  It must name a hermes-node binary; there is no default, because a" 1>&2
+  echo "  path into one developer's checkout is worse than an error." 1>&2
+  exit 2
+fi
+
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO="$(cd "$HERE/../.." && pwd)"
+ENTRY="$REPO/build-hermes/node_modules/ditz2/cli/main.js"
+
+if [ ! -f "$ENTRY" ]; then
+  echo "ERROR: no staging tree at $ENTRY -- run 'npm run hermes' first." 1>&2
+  exit 2
+fi
+
+exec "$HERMES_NODE" "$ENTRY" "$@"

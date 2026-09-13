@@ -64,6 +64,25 @@ describe('the pty and sed spellings', () => {
       .toEqual({ file: 'script', args: ['-qec', 'CMD', '/dev/null'] });
   });
 
+  it('spawns a sized no-input command with no shell in front of it', () => {
+    // The exact shape `tests/hermes/run.test.ts`'s control test depends on,
+    // pinned from Linux because that test's whole assertion is
+    // `child.exitCode === null`. Were `child` the `cat`-fed `/bin/sh` of the
+    // default darwin shape, the `cat` would block forever on a stdin pipe
+    // that test never writes to, the pipeline could never exit, and the
+    // assertion would be vacuously true on macOS -- green whatever the UI did.
+    // So: `script` itself is the spawned process, and no `cat` anywhere.
+    const darwin = ptySpawn('CMD', { platform: 'darwin', cols: '100', rows: '30', noStdin: true });
+    expect(darwin).toEqual({
+      file: 'script',
+      args: ['-q', '/dev/null', '/bin/sh', '-c', 'stty cols 100 rows 30 2>/dev/null; exec CMD'],
+    });
+    expect(darwin.args.join(' ')).not.toContain('cat');
+    const linux = ptySpawn('CMD', { platform: 'linux', cols: '100', rows: '30', noStdin: true });
+    expect(linux).toEqual({ file: 'script', args: ['-qec', 'CMD', '/dev/null'] });
+    expect(linux.args.join(' ')).not.toContain('cat');
+  });
+
   it('uses the BSD command line on darwin', () => {
     // No -c, transcript before the command, and a shell named explicitly.
     expect(ptySpawn('CMD', { platform: 'darwin' })).toEqual({
