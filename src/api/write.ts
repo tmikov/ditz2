@@ -19,7 +19,8 @@ import { repair } from '../store/doctor.js';
 import type { Repair } from '../store/doctor.js';
 import { resolveAuthor } from '../store/identity.js';
 import {
-  findIssue, issuePath, loadAllIssues, parseIssueFile, readIssueText, resolveIssueId, writeIssue,
+  findIssue, issuePath, listIssueIds, loadAllIssues, parseIssueFile, readIssueText,
+  resolveIssueId, writeIssue,
 } from '../store/issues.js';
 import { breakLock } from '../store/lock.js';
 import { withLock } from './session.js';
@@ -45,9 +46,13 @@ export interface EditableFields {
 export function addIssue(s: Session, fields: NewIssue): Issue {
   return withLock(s, 'add', () => {
     const config = loadConfig(s.root);
+    // The ids already on disk are what keeps the new one's short form
+    // unambiguous, and only the lock keeps that list true: the listing and the
+    // write below happen without releasing it, so a second `dz add` cannot
+    // slip a colliding id into the gap.
     const issue = createIssue(
       {
-        id: newId(),
+        id: newId(listIssueIds(s.root)),
         title: fields.title,
         type: validateEnum<IssueType>(fields.type, ISSUE_TYPES, 'type'),
         component: fields.component ?? null,

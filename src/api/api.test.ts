@@ -85,6 +85,23 @@ describe('writes', () => {
     expect(showIssue(s, id.slice(0, 13)).title).toBe('written through the facade');
   });
 
+  it('gives a burst of issues short ids that each still address one issue', () => {
+    // The scripted path, and the one a UI takes when it files several at
+    // once: fifty adds inside the same few milliseconds. `newId` guarantees
+    // distinct short ids only if it is handed the ids already on disk, and
+    // this is the only thing that checks `addIssue` actually hands them over
+    // — a correct allocator called with an empty list is still a collision.
+    const ids = Array.from(
+      { length: 50 },
+      (_, i) => addIssue(s, { title: `burst ${i}`, type: 'task' }).id,
+    );
+
+    expect(new Set(ids.map(renderShortId)).size).toBe(ids.length);
+    // And they are not merely distinct strings: each one resolves, which is
+    // what a user pasting it back into `dz show` actually does.
+    for (const id of ids) expect(showIssue(s, renderShortId(id)).id).toBe(id);
+  });
+
   it('changes several fields in one call', () => {
     const id = anIssue();
     const updated = setFields(s, id.slice(0, 13), {
@@ -132,7 +149,7 @@ describe('writes', () => {
     expect(closeIssueBy(s, id.slice(0, 13), 'fixed').status).toBe('closed');
     const other = anIssue('another');
     try {
-      closeIssueBy(s, other.slice(0, 13), 'abandoned');
+      closeIssueBy(s, renderShortId(other), 'abandoned');
       expect.unreachable('should have thrown');
     } catch (err) {
       expect((err as DzError).code).toBe('INVALID_FIELD');
@@ -309,7 +326,11 @@ describe('readForEdit and parseEdit', () => {
   it('refuses an edit that changes the id, which would overwrite another issue', () => {
     const mine = addIssue(s, { title: 'Mine', type: 'task' });
     const other = addIssue(s, { title: 'Other', type: 'task' });
-    const { issue, baseline } = readForEdit(s, mine.id.slice(0, 13));
+    // Two adds a fraction of a millisecond apart, looked up by the short ids
+    // the tool would have printed for them. That used to be a coin toss: a
+    // UUIDv7 prefix is the creation millisecond, so both issues answered to
+    // the same one and this line failed with AMBIGUOUS_PREFIX instead.
+    const { issue, baseline } = readForEdit(s, renderShortId(mine.id));
 
     try {
       parseEdit(s, baseline.replace(`id: ${mine.id}`, `id: ${other.id}`), issue);
@@ -318,7 +339,7 @@ describe('readForEdit and parseEdit', () => {
       expect((err as DzError).code).toBe('INVALID_FIELD');
       expect((err as DzError).message).toContain('the id may not be changed by an edit');
     }
-    expect(showIssue(s, other.id.slice(0, 13)).title).toBe('Other');
+    expect(showIssue(s, renderShortId(other.id)).title).toBe('Other');
   });
 
   it('does not let a write landing between two reads split issue from baseline', () => {

@@ -5,20 +5,18 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+import { shortId } from '../core/id.js';
 import type { Issue } from '../core/types.js';
 import type { Diagnosis, Repair } from '../store/doctor.js';
 import type { LoadFailure } from '../store/issues.js';
 
-// UUIDv7's leading 8 hex chars are only the top 32 bits of the 48-bit
-// millisecond timestamp, so they stay constant for ~65 real seconds and
-// collide for any two issues created in that window. 13 chars covers the
-// full timestamp field (both dash-delimited groups), which is enough to
-// distinguish issues created in different milliseconds.
-const SHORT_ID_LEN = 13;
-
-export function shortId(id: string): string {
-  return id.slice(0, SHORT_ID_LEN);
-}
+// shortId is defined next to resolvePrefix and newId rather than here. The
+// abbreviation this module prints, the prefix lookup that has to accept it
+// back, and the allocator that keeps it unambiguous are one rule, and a copy
+// of the length living here is the drift `dz doctor` already paid for. It is
+// re-exported because this module is where the CLI and the public API reach
+// for it, and a rendering concern is a fair thing to find in the renderer.
+export { shortId };
 
 function pad(value: string, width: number): string {
   return value.length >= width ? value : value + ' '.repeat(width - value.length);

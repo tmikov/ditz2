@@ -112,9 +112,17 @@ Files written by earlier versions spelled an in-comment blank line as four space
 read correctly, and `dz doctor --fix` cleans them up.
 
 Issue ids are UUIDv7, so filenames sort chronologically. The short id printed by every command is
-the first 13 characters of the UUID — long enough to stay unique across issues created in
-different milliseconds — and any unambiguous prefix of it works as `<id-prefix>` input, so you
-can usually type even fewer characters.
+the first 13 characters of the UUID, and any unambiguous prefix of it works as `<id-prefix>`
+input, so you can usually type even fewer characters.
+
+Those 13 characters are exactly the millisecond the id was minted in, which is no use at all for
+telling two issues apart on its own — everything random in a UUIDv7 sits further right than any
+short prefix reaches. So `dz` does not rely on the prefix being unique, it makes it unique: a new
+issue is given a millisecond no issue in the project is using yet, stepping forward from the
+current one until it finds a free one. A scripted run of `dz add` therefore gets ids up to a few
+milliseconds ahead of the clock, which nothing reads; the `created` field is the real time. Two
+people adding issues in separate clones can still collide, and there `dz` says so rather than
+guessing: you get the full ids and type a few more characters.
 
 ## Working with git
 

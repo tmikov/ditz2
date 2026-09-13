@@ -6,20 +6,60 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { newId, isUuid, resolvePrefix } from './id.js';
+import { newId, isUuid, resolvePrefix, shortId } from './id.js';
 import { DzError } from './errors.js';
+
+/**
+ * The id a v7 generator would produce in `msecs`, with a fixed tail. Only the
+ * short id — the 48-bit big-endian timestamp, as twelve hex digits split by
+ * the first dash — has to be faithful, and it is.
+ */
+function idAtMillisecond(msecs: number): string {
+  const hex = msecs.toString(16).padStart(12, '0');
+  return `${hex.slice(0, 8)}-${hex.slice(8)}-7000-8000-000000000000`;
+}
+
+/** A run minted the way `addIssue` mints one: every id so far handed back. */
+function burst(n: number): string[] {
+  const ids: string[] = [];
+  for (let i = 0; i < n; i += 1) ids.push(newId(ids));
+  return ids;
+}
 
 describe('newId', () => {
   it('produces a well-formed v7 uuid', () => {
-    expect(newId()).toMatch(
+    expect(newId([])).toMatch(
       /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
     );
   });
 
+  it('gives every id a short id of its own, however fast it is called', () => {
+    // A thousand of these take a fraction of the thousand milliseconds they
+    // would need to get distinct timestamps honestly, so most have to be
+    // placed by stepping the clock rather than reading it. Before that, the
+    // short id was the millisecond and nothing else, and a run like this one
+    // handed out a couple of hundred distinct names for a thousand issues.
+    const ids = burst(1000);
+    expect(new Set(ids.map(shortId)).size).toBe(ids.length);
+  });
+
   it('is monotonic within a millisecond, so filename order is chronological', () => {
-    const ids = Array.from({ length: 5000 }, () => newId());
+    const ids = burst(1000);
     expect([...ids].sort()).toEqual(ids);
     expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it('steps past a whole run of short ids that are already taken', () => {
+    // Deliberately not a timing test. A UUIDv7's short id is exactly its
+    // millisecond in hex, so a millisecond can be reserved by writing one
+    // down; this reserves every one from now to a full second out. An
+    // allocator that read the clock and ignored `taken` would land inside
+    // that second no matter how the test is scheduled.
+    const now = Date.now();
+    const taken = Array.from({ length: 1000 }, (_, i) => idAtMillisecond(now + i));
+    const id = newId(taken);
+    expect(isUuid(id)).toBe(true);
+    expect(taken.map(shortId)).not.toContain(shortId(id));
   });
 });
 
