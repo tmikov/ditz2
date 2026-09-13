@@ -19,6 +19,8 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import * as esbuild from 'esbuild';
+import inkPatches from './ink-patches.mjs';
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const STAGING = path.join(REPO, 'build-hermes');
@@ -43,6 +45,57 @@ function stageDitz2() {
   );
 }
 
+/**
+ * The staged ditz2-ui: the UI, React and Ink flattened into one CommonJS file.
+ *
+ * The entry is a generated wrapper rather than ui/src/index.tsx, because
+ * runUi() calls render() synchronously and the Yoga proxy throws on any read
+ * before initYoga() resolves. Phase 1 changes no source, so the barrier lives
+ * here in build output.
+ *
+ * The wrapper imports the shim through the bare 'yoga-layout' specifier, the
+ * same one the alias rewrites for Ink's own imports, so both reach one module
+ * identity. Two identities would mean awaiting one proxy while Ink reads
+ * another, and the second throws.
+ */
+async function stageDitz2Ui() {
+  const entry = path.join(STAGING, 'ui-entry.mjs');
+  const uiSrc = path.join(REPO, 'ui', 'src', 'index.tsx');
+  write(entry, [
+    "import {initYoga} from 'yoga-layout';",
+    `import {runUi as inner} from ${JSON.stringify(uiSrc)};`,
+    'export async function runUi(opts) { await initYoga(); return inner(opts); }',
+    '',
+  ].join('\n'));
+
+  await esbuild.build({
+    entryPoints: [entry],
+    outfile: path.join(NM, 'ditz2-ui', 'index.js'),
+    bundle: true,
+    platform: 'node',
+    format: 'cjs',
+    // Shared with the CLI half rather than embedded twice; resolved at run
+    // time from the staged sibling.
+    external: ['ditz2', 'react-devtools-core'],
+    alias: { 'yoga-layout': path.join(REPO, 'scripts', 'hermes', 'yoga-shim.mjs') },
+    plugins: [inkPatches],
+    // Stated rather than left to tsconfig discovery. esbuild looks for the
+    // nearest tsconfig to each file, and the entry is a generated wrapper in
+    // build-hermes/ rather than under ui/ — close enough to work by accident
+    // and to stop working for a reason nobody would look for. ui/tsconfig.json
+    // sets "jsx": "react-jsx" with React as the import source, which is what
+    // 'automatic' means here.
+    jsx: 'automatic',
+    jsxImportSource: 'react',
+    logLevel: 'warning',
+  });
+
+  write(
+    path.join(NM, 'ditz2-ui', 'package.json'),
+    `${JSON.stringify({ name: 'ditz2-ui', version: '0.0.0-staged', main: 'index.js' }, null, 2)}\n`,
+  );
+}
+
 // The Node build first. Two checks compare against `dist/` -- one of them
 // exists to catch a CJS emit landing there by mistake -- and `dist/` is
 // gitignored, so a fresh clone has none. Leaving it to a remembered manual
@@ -57,4 +110,5 @@ write(
   `${JSON.stringify({ name: 'ditz2-hermes-staging', private: true, type: 'commonjs' }, null, 2)}\n`,
 );
 stageDitz2();
-console.log(`staged ditz2 into ${path.relative(REPO, NM)}`);
+await stageDitz2Ui();
+console.log(`staged ditz2 and ditz2-ui into ${path.relative(REPO, NM)}`);
