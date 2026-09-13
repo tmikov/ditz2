@@ -95,8 +95,13 @@ export function registerUi(program: Command, ctx: CliContext): void {
         );
       }
       const isTty = process.stdin.isTTY === true && process.stdout.isTTY === true;
-      // The only mention of ditz2-ui anywhere in this package, and deliberately
-      // a dynamic import: it is not a dependency and must not be bundled.
-      ctx.exitCode = await handOverToUi(ctx, isTty, () => import(UI_PACKAGE));
+      // Dynamic, so the UI is optional: it loads on `dz ui` and nowhere else,
+      // and a missing package is an install hint rather than a crash at
+      // startup. Spelled literally rather than through UI_PACKAGE so that
+      // hermes-node's bundler can see it — a computed specifier is invisible
+      // to any static scanner, and `dz` ships as a single binary with the UI
+      // inside it. Nothing a consumer can reach is made heavier: the published
+      // exports map offers only src/api/, which never imports this file.
+      ctx.exitCode = await handOverToUi(ctx, isTty, () => import('ditz2-ui'));
     });
 }
