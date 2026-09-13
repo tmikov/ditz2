@@ -197,5 +197,13 @@ if (dist !== null) console.log(`linked ${path.relative(REPO, dist)}`);
 // check. Running it here means every build exercises it. DZ_DIST is set only
 // for a --dist run, so the executable's own checks run exactly when there is
 // an executable to run them against.
-run(path.join(REPO, 'node_modules', '.bin', 'vitest'), ['run', 'tests/hermes'],
+// --no-file-parallelism when there is a binary to check: dist.test.ts proves
+// the executable is self-contained by renaming build-hermes/ aside for one
+// assertion, and run.test.ts's launcher reads that same tree. Run in parallel
+// they collide, and the launcher fails for a reason that has nothing to do
+// with what either test is measuring.
+run(path.join(REPO, 'node_modules', '.bin', 'vitest'),
+  dist === null
+    ? ['run', 'tests/hermes']
+    : ['run', 'tests/hermes', '--no-file-parallelism'],
   dist === null ? {} : { DZ_DIST: dist });
