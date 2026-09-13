@@ -39,6 +39,9 @@
     "uuid": "^11.1.0",
     "yaml": "^2.8.1"
   },
+  "overrides": {
+    "string-width": "^7.2.0"
+  },
   "devDependencies": {
     "@types/node": "^22.10.0",
     "ajv": "^8.20.0",

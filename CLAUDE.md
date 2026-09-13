@@ -32,6 +32,17 @@ npm run test:all    # both packages, both test suites, both typechecks
 excludes the tests and vitest does not typecheck, so without that step a type
 error in a UI test is invisible.
 
+`string-width` is held at `^7.2.0` by an `overrides` entry in the root
+`package.json`, and that pin is load-bearing. Ink 6.5.0 bumped it to 8, which
+matches graphemes with `/^\p{RGI_Emoji}$/v`; `RGI_Emoji` is a property of
+strings, so the `v` flag cannot be rewritten to `u`, and Hermes — which `dz`
+ships as, so `dz ui` runs inside it — rejects the flag at parse time. The
+bundle then fails to compile before a line of it runs. Nothing under node
+notices — `ui/`'s frame assertions pass unchanged on either major — which is
+exactly the danger: a dependency refresh that quietly drops the override goes
+green here and ships a binary that will not start.
+`ui/tests/string-width-pin.test.ts` is what stands between the two.
+
 `test:ui` calls `tsc` and `vitest` directly (`tsc -p ui/tsconfig.json`,
 `tsc -p ui/tsconfig.test.json`, `vitest run --root ui`) rather than `npm run
 <script> --workspace ditz2-ui`. npm 8 discards the exit status of any
