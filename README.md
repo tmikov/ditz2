@@ -1,5 +1,9 @@
 # ditz2
 
+![`dz list` in a terminal, printing four open issues with their short id, status and type.](docs/screenshots/cli-list.png)
+
+![`dz ui`: the same issues as a list, the selected one highlighted and previewed below it.](docs/screenshots/ui-issue-list.png)
+
 `ditz2` is a command line issue tracker that keeps your issues inside your project's repository,
 as files, next to the code they describe. You file and close bugs with `dz`, from the terminal
 you already have open. There is nothing running in the background and nothing to log into: the
@@ -293,6 +297,8 @@ in [ui/README.md](ui/README.md#keys) rather than here: this file is outside that
 package, and an enumeration a plan has no reason to look at is one that goes
 stale. It lives in a separate package so that the CLI keeps its three
 dependencies — Ink and React are 38 packages and about 23 MB.
+
+![One issue full-screen, its body rendered down the page under the status line.](docs/screenshots/ui-issue-view.png)
 
 Its writes go through the same public API as the CLI's, so they take the same
 lock and get the same validation. It passes `lockTimeoutMs: 0` for the reason

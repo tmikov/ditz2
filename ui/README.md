@@ -43,6 +43,8 @@ the component list**: the form picks an issue's component out of what
 `dz component add`/`rm` has configured, and offers no way to change that list.
 `doctor` and `init` are `dz`-only too.
 
+![One issue full-screen: title, status line, and the body rendered down the page, with a scroll footer.](../docs/screenshots/ui-issue-view.png)
+
 Because a write can be refused, two refusals have screens of their own. A lock
 held by someone else — an agent, or your own `dz` in another window — is a
 waiting overlay that names the holder and counts, with `r` to try again; the UI
@@ -91,6 +93,10 @@ having a second copy of the rule, and it is deliberate.
 | `r` | reload from disk |
 | `?` | the list and issue screen bindings, plus the form's and the waiting overlay's. The comment and close overlays' own keys are advertised in their footers and nowhere else. `?` does not reach into the comment, close, form, waiting or filter overlays; an error message is the exception, since the list under it stays live, and `?` there replaces the message with this list |
 | `q` | quit |
+
+`?` shows that same list in the app, so you never need this file open to use it:
+
+![The in-app help overlay: key on the left, what it does on the right, then the filter-field prefixes.](../docs/screenshots/ui-help.png)
 
 The filter field takes bare words as a regex over titles, bodies and log
 entries, and `status:`, `type:`, `component:`, `assignee:` and `all:` as
